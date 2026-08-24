@@ -231,6 +231,15 @@
   .mom-compare .mom-box .lbl { font-size: 10px; color: var(--text-sub); }
   .mom-compare .mom-arrow { font-size: 20px; }
 
+  .mom-stat-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .mom-stat-row:last-child { border-bottom: none; }
+  .mom-stat-label { width: 62px; font-size: 12px; font-weight: 700; color: var(--text-sub); flex-shrink: 0; }
+  .mom-stat-values { flex: 1; display: flex; align-items: baseline; gap: 6px; font-size: 12px; font-weight: 700; overflow: hidden; }
+  .mom-stat-prev { color: var(--text-sub); font-weight: 600; }
+  .mom-stat-sep { color: var(--text-sub); opacity: .5; }
+  .mom-stat-cur { font-weight: 900; }
+  .mom-stat-chip { font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 20px; flex-shrink: 0; white-space: nowrap; }
+
   /* ===== Command Center home ===== */
   .hero-card { text-align: center; padding: 20px 16px; position: relative; overflow: hidden; }
   .hero-card::before { content: ''; position: absolute; top: -40%; left: 50%; transform: translateX(-50%); width: 220px; height: 220px; background: radial-gradient(circle, rgba(0,185,0,0.25), transparent 70%); pointer-events: none; }
