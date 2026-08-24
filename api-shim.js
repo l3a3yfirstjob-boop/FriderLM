@@ -29,6 +29,24 @@ var API_WRITE_FNS = [
 
 var ALL_API_FNS = API_READ_FNS.concat(API_WRITE_FNS);
 
+/*************************************************************
+ * CLIENT-SIDE READ CACHE
+ * Keeps the JSON result of every successful read call in memory
+ * for this browser tab session. Switching pages calls the same
+ * loadX() functions as before, which still call google.script.run
+ * — but a cache hit here returns instantly with no network request,
+ * so tab-switching feels as fast as Co-Pilot (which never fetches
+ * at all). Cache lives only in memory: closing/reloading the page
+ * clears it naturally, no stale data carried across sessions.
+ * Cleared automatically after any successful write, and manually
+ * via window.__friderCache.clear() (wired to the refresh button
+ * and pull-to-refresh gesture in app.js).
+ *************************************************************/
+var _friderReadCache_ = {};
+window.__friderCache = {
+  clear: function () { _friderReadCache_ = {}; }
+};
+
 function makeScriptRunner_() {
   var successHandler = null;
   var failureHandler = null;
@@ -43,8 +61,16 @@ function makeScriptRunner_() {
     runner[name] = function () {
       var args = Array.prototype.slice.call(arguments);
       var isWrite = API_WRITE_FNS.indexOf(name) !== -1;
-      var req;
 
+      if (!isWrite) {
+        var cacheKey = name + ':' + JSON.stringify(args);
+        if (Object.prototype.hasOwnProperty.call(_friderReadCache_, cacheKey)) {
+          if (successHandler) successHandler(_friderReadCache_[cacheKey]);
+          return;
+        }
+      }
+
+      var req;
       if (isWrite) {
         req = fetch(APPS_SCRIPT_URL, {
           method: 'POST',
@@ -61,6 +87,12 @@ function makeScriptRunner_() {
       req.then(function (res) { return res.json(); })
         .then(function (json) {
           if (json && json.ok) {
+            if (isWrite) {
+              // data changed on the server — every cached read is now stale
+              window.__friderCache.clear();
+            } else {
+              _friderReadCache_[name + ':' + JSON.stringify(args)] = json.result;
+            }
             if (successHandler) successHandler(json.result);
           } else {
             var err = new Error((json && json.error) || 'ไม่ทราบสาเหตุ');
