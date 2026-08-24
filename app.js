@@ -826,6 +826,28 @@ function statBox(num, lbl) {
   return '<div class="stat-box"><div class="num">' + num + '</div><div class="lbl">' + lbl + '</div></div>';
 }
 
+// One comparison row for the History MoM card: label, this-month value, vs
+// last-month value, with a %-change chip. unit is appended after the number
+// ('฿' for money, '' for a plain count like job count).
+function momStatRow(label, curVal, prevVal, unit) {
+  curVal = Number(curVal) || 0;
+  prevVal = Number(prevVal) || 0;
+  var pct = prevVal !== 0 ? ((curVal - prevVal) / Math.abs(prevVal) * 100) : null;
+  var up = pct === null ? true : pct >= 0;
+  var textColor = pct === null ? '#8b93a7' : (up ? '#00d26a' : '#f43f5e');
+  var bgColor = pct === null ? 'rgba(139,147,167,0.12)' : (up ? 'rgba(0,210,106,0.12)' : 'rgba(244,63,94,0.12)');
+  var chipText = pct === null ? '—' : ((up ? '+' : '') + pct.toFixed(1) + '%');
+  return '<div class="mom-stat-row">' +
+    '<div class="mom-stat-label">' + label + '</div>' +
+    '<div class="mom-stat-values">' +
+      '<span class="mom-stat-prev">' + fmtNum(prevVal) + unit + '</span>' +
+      '<span class="mom-stat-sep">→</span>' +
+      '<span class="mom-stat-cur">' + fmtNum(curVal) + unit + '</span>' +
+    '</div>' +
+    '<div class="mom-stat-chip" style="color:' + textColor + '; background:' + bgColor + ';">' + (pct === null ? chipText : (up ? '↗ ' : '↘ ') + chipText) + '</div>' +
+  '</div>';
+}
+
 function fmtSigned(n) {
   var num = Number(n) || 0;
   return (num >= 0 ? '' : '-') + Math.abs(num).toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -1540,23 +1562,28 @@ function renderHistoryMonthly(data) {
   html += statBox(fmtNum(t.targetDays), 'วันถึงเป้า 🥇');
   html += '</div>';
 
-  // 2) Full daily table
+  // 2) Trend — full month's daily net-profit line, same chart used on Home
+  html += '<div class="card"><div class="card-title">แนวโน้มกำไรรายวัน — เดือนนี้</div>';
+  html += '<div class="sparkline-wrap" style="margin-top:6px;">' + buildMetricSparkline(data.days, 'netProfit', data.days.length) + '</div>';
+  html += '</div>';
+
+  // 3) Revenue vs Expense donut for the month
+  html += buildDonutCard('สัดส่วนรายได้ vs รายจ่าย — เดือนนี้', [
+    { label: 'รายได้', value: Number(t.revenue) || 0, color: '#00B900' },
+    { label: 'รายจ่าย', value: Number(t.totalExp) || 0, color: '#f43f5e' }
+  ]);
+
+  // 4) Full daily table
   html += renderFullDailyTable(data.days);
 
   // 3) KPI calendar
   html += renderKpiCalendar(data.days, data.year, data.month);
 
-  // 4) MoM
-  var pct = (data.prevMonthProfit && data.prevMonthProfit !== 0) ? ((t.netProfit - data.prevMonthProfit) / Math.abs(data.prevMonthProfit) * 100) : null;
+  // 4) MoM — now compares Revenue, Jobs, and Net Profit vs previous month (not just profit)
   html += '<div class="card"><div class="card-title">เทียบเดือนก่อน (MoM)</div>';
-  html += '<div class="mom-compare">';
-  html += '<div class="mom-box"><div class="amt" style="color:var(--text-sub);">' + fmtNum(data.prevMonthProfit) + ' ฿</div><div class="lbl">เดือนก่อน</div></div>';
-  html += '<div class="mom-arrow">' + (pct === null ? '→' : (pct >= 0 ? '↗' : '↘')) + '</div>';
-  html += '<div class="mom-box"><div class="amt" style="color:var(--brand);">' + fmtNum(t.netProfit) + ' ฿</div><div class="lbl">เดือนนี้</div></div>';
-  html += '</div>';
-  if (pct !== null) {
-    html += '<div style="text-align:center; font-size:13px; font-weight:800; color:' + (pct >= 0 ? 'var(--brand)' : 'var(--danger)') + ';">' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%</div>';
-  }
+  html += momStatRow('รายได้', t.revenue, data.prevMonthRevenue, '฿');
+  html += momStatRow('งาน', t.jobs, data.prevMonthJobs, '');
+  html += momStatRow('กำไรสุทธิ', t.netProfit, data.prevMonthProfit, '฿');
   html += '</div>';
 
   // 5) Revenue breakdown
