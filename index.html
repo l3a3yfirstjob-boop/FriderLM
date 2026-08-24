@@ -27,11 +27,14 @@
       <div class="app-title"><span class="brand-name">Frider</span> Tools<span class="sub">For Lineman Driver</span></div>
     </div>
     <div class="header-btns">
+      <button class="icon-btn" id="refreshBtn" onclick="forceRefreshCurrentPage()" title="รีเฟรชข้อมูล">↻</button>
       <button class="icon-btn" id="settingsBtn" onclick="openSettings()">⚙</button>
       <button class="icon-btn" id="langToggleBtn" onclick="toggleAppLang()">TH</button>
       <button class="icon-btn" id="themeToggleBtn" onclick="toggleAppTheme()">🌙</button>
     </div>
   </div>
+
+  <div id="pullRefreshIndicator">↓ ปล่อยเพื่อรีเฟรช</div>
 
   <!-- ============ HOME ============ -->
   <div class="page active" id="page-home">
