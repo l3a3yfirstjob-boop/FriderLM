@@ -258,12 +258,62 @@ function switchPage(name) {
   document.querySelectorAll('.nav-btn').forEach(function (b) {
     b.classList.toggle('active', b.getAttribute('data-page') === name);
   });
+  APP.currentPage = name;
   if (name === 'home') loadHome();
   if (name === 'finance') loadFinance();
   if (name === 'analysis') loadAnalysis();
   if (name === 'copilot' && window.initCopilot) window.initCopilot();
   if (name === 'history') loadHistory();
 }
+
+// Re-runs whichever loadX() belongs to the page currently on screen, after
+// clearing the client-side read cache so it actually re-fetches instead of
+// re-serving the cached result. Used by both the header refresh button and
+// the pull-to-refresh gesture below.
+function forceRefreshCurrentPage() {
+  if (window.__friderCache) window.__friderCache.clear();
+  var page = APP.currentPage || 'home';
+  var btn = document.getElementById('refreshBtn');
+  if (btn) btn.classList.add('spinning');
+  showToast('กำลังรีเฟรช...');
+  switchPage(page);
+  setTimeout(function () { if (btn) btn.classList.remove('spinning'); }, 1200);
+}
+
+/* ============================= PULL TO REFRESH ============================= */
+(function () {
+  var startY = 0, pulling = false, triggered = false;
+  var THRESHOLD = 70; // px of downward drag before it counts as a refresh
+
+  document.addEventListener('touchstart', function (e) {
+    // Only arm the gesture if the visible page is already scrolled to the top —
+    // otherwise this would hijack normal scrolling anywhere mid-page.
+    var activePage = document.querySelector('.page.active');
+    if (!activePage || activePage.scrollTop > 0) { pulling = false; return; }
+    startY = e.touches[0].clientY;
+    pulling = true;
+    triggered = false;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', function (e) {
+    if (!pulling) return;
+    var dy = e.touches[0].clientY - startY;
+    var indicator = document.getElementById('pullRefreshIndicator');
+    if (dy > 12 && indicator) {
+      indicator.classList.add('show');
+      indicator.style.opacity = Math.min(dy / THRESHOLD, 1);
+      if (dy > THRESHOLD) indicator.classList.add('ready'); else indicator.classList.remove('ready');
+    }
+    if (dy > THRESHOLD) triggered = true;
+  }, { passive: true });
+
+  document.addEventListener('touchend', function () {
+    var indicator = document.getElementById('pullRefreshIndicator');
+    if (indicator) { indicator.classList.remove('show', 'ready'); indicator.style.opacity = 0; }
+    if (pulling && triggered) forceRefreshCurrentPage();
+    pulling = false; triggered = false;
+  }, { passive: true });
+})();
 
 function goToAnalysisDate(dateStr) {
   APP.analysisDate = parseDateKey(dateStr);
@@ -1108,7 +1158,26 @@ function loadAnalysis() {
   document.getElementById('analysisContent').innerHTML = skeletonCards(3);
   APP.analysisFilter = 'all';
   var key = toDateKey(APP.analysisDate);
-  google.script.run.withSuccessHandler(renderAnalysisPage).withFailureHandler(errBox('analysisContent', 'loadAnalysis')).getAnalysisPageData(key);
+  google.script.run.withSuccessHandler(function (data) {
+    renderAnalysisPage(data);
+    prefetchAnalysisAround_(APP.analysisDate);
+  }).withFailureHandler(errBox('analysisContent', 'loadAnalysis')).getAnalysisPageData(key);
+}
+
+// Quietly loads getAnalysisPageData for the 3 days before and after the one
+// just viewed, so ±1-3 day navigation feels instant (data is already sitting
+// in the api-shim's read cache by the time the user taps prev/next). No UI
+// update happens here — success handlers are empty, this only warms the cache.
+// Jumping far away (e.g. day 20 -> day 10) is a cache miss as normal, and
+// prefetching simply re-centers around wherever the user lands next.
+function prefetchAnalysisAround_(centerDate) {
+  for (var offset = -3; offset <= 3; offset++) {
+    if (offset === 0) continue;
+    var d = new Date(centerDate);
+    d.setDate(d.getDate() + offset);
+    var key = toDateKey(d);
+    google.script.run.withSuccessHandler(function () {}).withFailureHandler(function () {}).getAnalysisPageData(key);
+  }
 }
 function analysisShiftDate(d) {
   APP.analysisDate.setDate(APP.analysisDate.getDate() + d);
@@ -1411,9 +1480,24 @@ function loadHistory() {
     return function (res) { clearTimeout(timedOut); if (loadId === APP.historyLoadId) fn(res); };
   }
   if (APP.historyTab === 'monthly') {
-    google.script.run.withSuccessHandler(wrap(renderHistoryMonthly)).withFailureHandler(wrap(errBox('historyContent', 'loadHistory'))).getMonthlyStats(APP.historyMonth, APP.historyYear);
+    google.script.run.withSuccessHandler(wrap(function (data) {
+      renderHistoryMonthly(data);
+      prefetchHistoryAround_(APP.historyMonth, APP.historyYear);
+    })).withFailureHandler(wrap(errBox('historyContent', 'loadHistory'))).getMonthlyStats(APP.historyMonth, APP.historyYear);
   } else {
     google.script.run.withSuccessHandler(wrap(renderHistoryLifetime)).withFailureHandler(wrap(errBox('historyContent', 'loadHistory'))).getLifetimeSummary();
+  }
+}
+
+// Same idea as prefetchAnalysisAround_ but for months either side of the
+// one just viewed — warms the cache silently, no UI change.
+function prefetchHistoryAround_(month, year) {
+  for (var offset = -2; offset <= 2; offset++) {
+    if (offset === 0) continue;
+    var m = month + offset, y = year;
+    while (m < 1) { m += 12; y -= 1; }
+    while (m > 12) { m -= 12; y += 1; }
+    google.script.run.withSuccessHandler(function () {}).withFailureHandler(function () {}).getMonthlyStats(m, y);
   }
 }
 function historyShiftMonth(d) {
