@@ -21,6 +21,13 @@ var API_READ_FNS = [
   'getGoals', 'getRawText', 'getTrend', 'getModeRadarStats', 'getDeepAnalytics'
 ];
 
+// Security-sensitive reads that must NEVER be served from the client cache —
+// getPinStatus has to reflect the server's current lock state on every single
+// check, or a PIN set after the first page load would silently never be
+// enforced (exactly the bug this fixes). Still a normal GET call, just never
+// cached or reused.
+var API_NO_CACHE_FNS = ['getPinStatus'];
+
 // Functions that write data — sent as POST (text/plain body, to dodge
 // the CORS preflight that Apps Script Web Apps can't answer).
 var API_WRITE_FNS = [
@@ -61,8 +68,9 @@ function makeScriptRunner_() {
     runner[name] = function () {
       var args = Array.prototype.slice.call(arguments);
       var isWrite = API_WRITE_FNS.indexOf(name) !== -1;
+      var noCache = API_NO_CACHE_FNS.indexOf(name) !== -1;
 
-      if (!isWrite) {
+      if (!isWrite && !noCache) {
         var cacheKey = name + ':' + JSON.stringify(args);
         if (Object.prototype.hasOwnProperty.call(_friderReadCache_, cacheKey)) {
           if (successHandler) successHandler(_friderReadCache_[cacheKey]);
@@ -90,7 +98,7 @@ function makeScriptRunner_() {
             if (isWrite) {
               // data changed on the server — every cached read is now stale
               window.__friderCache.clear();
-            } else {
+            } else if (!noCache) {
               _friderReadCache_[name + ':' + JSON.stringify(args)] = json.result;
             }
             if (successHandler) successHandler(json.result);
