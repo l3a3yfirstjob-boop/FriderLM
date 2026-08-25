@@ -282,36 +282,58 @@ function forceRefreshCurrentPage() {
 
 /* ============================= PULL TO REFRESH ============================= */
 (function () {
-  var startY = 0, pulling = false, triggered = false;
-  var THRESHOLD = 70; // px of downward drag before it counts as a refresh
+  var startY = 0, pulling = false, armed = false;
+  var THRESHOLD = 80;       // px of downward drag before it even starts arming
+  var HOLD_MS = 1500;       // must stay pulled past THRESHOLD this long before release triggers a refresh
+  var armedAt = null;
+
+  function scrollY() {
+    return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+  }
 
   document.addEventListener('touchstart', function (e) {
-    // Only arm the gesture if the visible page is already scrolled to the top —
-    // otherwise this would hijack normal scrolling anywhere mid-page.
-    var activePage = document.querySelector('.page.active');
-    if (!activePage || activePage.scrollTop > 0) { pulling = false; return; }
+    // Only arm the gesture if the WHOLE PAGE is scrolled all the way to the
+    // top — checking a specific .page div's scrollTop was wrong (that div
+    // never scrolls itself; the page/window does), which let mid-page swipes
+    // accidentally trigger a refresh. This checks real page scroll position.
+    if (scrollY() > 4) { pulling = false; return; }
     startY = e.touches[0].clientY;
     pulling = true;
-    triggered = false;
+    armed = false;
+    armedAt = null;
   }, { passive: true });
 
   document.addEventListener('touchmove', function (e) {
     if (!pulling) return;
     var dy = e.touches[0].clientY - startY;
     var indicator = document.getElementById('pullRefreshIndicator');
-    if (dy > 12 && indicator) {
-      indicator.classList.add('show');
-      indicator.style.opacity = Math.min(dy / THRESHOLD, 1);
-      if (dy > THRESHOLD) indicator.classList.add('ready'); else indicator.classList.remove('ready');
+    if (dy < THRESHOLD) {
+      // not pulled far enough yet — reset the hold timer and hide the indicator
+      armed = false; armedAt = null;
+      if (indicator) indicator.classList.remove('show', 'ready');
+      return;
     }
-    if (dy > THRESHOLD) triggered = true;
+    // pulled past the distance threshold — start (or continue) the hold timer
+    if (!armedAt) armedAt = Date.now();
+    var held = Date.now() - armedAt;
+    if (indicator) {
+      indicator.classList.add('show');
+      if (held >= HOLD_MS) {
+        armed = true;
+        indicator.classList.add('ready');
+        indicator.innerText = '↓ ปล่อยเพื่อรีเฟรช';
+      } else {
+        indicator.classList.remove('ready');
+        indicator.innerText = '↓ รูดค้างไว้...';
+      }
+    }
   }, { passive: true });
 
   document.addEventListener('touchend', function () {
     var indicator = document.getElementById('pullRefreshIndicator');
-    if (indicator) { indicator.classList.remove('show', 'ready'); indicator.style.opacity = 0; }
-    if (pulling && triggered) forceRefreshCurrentPage();
-    pulling = false; triggered = false;
+    if (indicator) { indicator.classList.remove('show', 'ready'); indicator.innerText = '↓ ปล่อยเพื่อรีเฟรช'; }
+    if (pulling && armed) forceRefreshCurrentPage();
+    pulling = false; armed = false; armedAt = null;
   }, { passive: true });
 })();
 
