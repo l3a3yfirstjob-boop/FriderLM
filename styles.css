@@ -268,6 +268,11 @@
   .neon-compare-track .rev { background: linear-gradient(90deg, #00b98c, #00ffdc); color:#04210a; padding-left:8px; }
   .neon-compare-track .exp { background: linear-gradient(90deg, #ff2fd0, #ff6bdf); color:#1a0014; justify-content:flex-end; padding-right:8px; }
   .neon-legend { display: flex; justify-content: space-between; margin-top: 8px; font-size: 10px; }
+  .neon-stat-row { display: flex; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(0,255,220,0.12); }
+  .neon-stat { flex: 1; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .neon-stat .ico { font-size: 16px; }
+  .neon-stat .val { font-size: 16px; font-weight: 900; color: #fff; }
+  .neon-stat .lbl { font-size: 10px; color: #8b93a7; }
 
   /* ===== Command Center home ===== */
   .hero-card { text-align: center; padding: 20px 16px; position: relative; overflow: hidden; }
