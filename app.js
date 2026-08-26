@@ -912,7 +912,7 @@ function statBox(num, lbl) {
 // Combined Net-Profit / Revenue / Expense card for the History page, in the
 // neon style the user picked (layout "3 · แท่งเทียบ"): profit is the hero
 // number, revenue-vs-expense share one comparison bar below it.
-function buildNeonProfitCard(revenue, expense, profit, prevMonthProfit) {
+function buildNeonProfitCard(revenue, expense, profit, prevMonthProfit, workingDays, jobs, targetDays) {
   revenue = Number(revenue) || 0;
   expense = Number(expense) || 0;
   profit = Number(profit) || 0;
@@ -926,6 +926,15 @@ function buildNeonProfitCard(revenue, expense, profit, prevMonthProfit) {
   var momHtml = momPct === null ? '' :
     '<div class="neon-hero-sub">' + (momPct >= 0 ? '↑ ' : '↓ ') + Math.abs(momPct).toFixed(1) + '% จากเดือนก่อน</div>';
 
+  var statsHtml = '';
+  if (workingDays !== undefined) {
+    statsHtml = '<div class="neon-stat-row">' +
+      '<div class="neon-stat"><span class="ico">📅</span><span class="val">' + fmtNum(workingDays) + '</span><span class="lbl">วันทำงาน</span></div>' +
+      '<div class="neon-stat"><span class="ico">🚕</span><span class="val">' + fmtNum(jobs) + '</span><span class="lbl">งานทั้งหมด</span></div>' +
+      '<div class="neon-stat"><span class="ico">🏆</span><span class="val">' + fmtNum(targetDays) + '</span><span class="lbl">วันถึงเป้า</span></div>' +
+    '</div>';
+  }
+
   return '<div class="neon-card">' +
     '<div class="neon-hero-lbl">📈 กำไรสุทธิ (Net Profit)</div>' +
     '<div class="neon-hero-amt">' + fmtNum(profit) + ' ฿</div>' +
@@ -935,6 +944,7 @@ function buildNeonProfitCard(revenue, expense, profit, prevMonthProfit) {
       '<div class="seg exp" style="width:' + expPct + '%;">' + fmtNum(expense) + ' ฿</div>' +
     '</div>' +
     '<div class="neon-legend"><span style="color:#00ffdc;">💰 รายได้ ' + revPct.toFixed(0) + '%</span><span style="color:#ff2fd0;">💸 รายจ่าย ' + expPct.toFixed(0) + '%</span></div>' +
+    statsHtml +
   '</div>';
 }
 
@@ -1697,24 +1707,14 @@ function renderHistoryMonthly(data) {
     return;
   }
 
-  // 1) Summary
-  html += '<div class="card big-profit">';
-  html += '<div class="amt">' + fmtNum(t.netProfit) + ' ฿</div>';
-  html += '<div class="sub">กำไรสุทธิรวมเดือนนี้</div>';
-  html += '</div>';
-  html += '<div class="grid3" style="margin-bottom:12px;">';
-  html += statBox(fmtNum(t.workingDays), 'วันทำงาน');
-  html += statBox(fmtNum(t.jobs), 'งานทั้งหมด');
-  html += statBox(fmtNum(t.targetDays), 'วันถึงเป้า 🥇');
-  html += '</div>';
+  // 1) Combined summary card — Net Profit hero, Revenue-vs-Expense compare
+  // bar, and the work-stats (days/jobs/target-days-hit) all in one card, on
+  // top of the page. Replaces the old separate hero + stat-box-grid + broken
+  // donut cards (buildDonutCard expected {name,...} but got {label,...},
+  // so both legend rows showed "undefined").
+  html += buildNeonProfitCard(t.revenue, t.totalExp, t.netProfit, data.prevMonthProfit, t.workingDays, t.jobs, t.targetDays);
 
-  // 2) Combined summary card — Net Profit hero + Revenue-vs-Expense compare
-  // bar in one card (replaces the old separate trend+donut cards; the donut
-  // had a real bug — buildDonutCard expects {name,...} but was given
-  // {label,...}, so both legend rows showed "undefined")
-  html += buildNeonProfitCard(t.revenue, t.totalExp, t.netProfit, data.prevMonthProfit);
-
-  // 3) Full daily table
+  // 2) Full daily table
   html += renderFullDailyTable(data.days);
 
   // 3) KPI calendar
