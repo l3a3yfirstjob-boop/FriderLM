@@ -117,6 +117,7 @@ function pinPress(d) {
   APP.pinBuffer = (APP.pinBuffer || '') + d;
   if (APP.pinBuffer.length > 6) APP.pinBuffer = APP.pinBuffer.slice(0, 6);
   renderPinDots();
+  if (APP.pinBuffer.length === 6) submitPin();
 }
 function pinBackspace() {
   APP.pinBuffer = (APP.pinBuffer || '').slice(0, -1);
@@ -141,12 +142,22 @@ function submitPin() {
       APP.pendingPinCallback = null;
       if (cb) cb();
     } else {
+      var dotsWrap = document.getElementById('pinDots');
+      if (dotsWrap) {
+        dotsWrap.classList.add('pin-error', 'pin-shake');
+        setTimeout(function () { dotsWrap.classList.remove('pin-shake'); }, 400);
+      }
       document.getElementById('pinError').innerText = 'PIN ไม่ถูกต้อง ลองใหม่อีกครั้ง';
       APP.pinBuffer = '';
-      renderPinDots();
+      setTimeout(function () {
+        renderPinDots();
+        if (dotsWrap) dotsWrap.classList.remove('pin-error');
+      }, 400);
     }
   }).withFailureHandler(function (err) {
     document.getElementById('pinError').innerText = err.message || 'เกิดข้อผิดพลาด';
+    APP.pinBuffer = '';
+    renderPinDots();
   }).verifyPin(pin);
 }
 
@@ -284,7 +295,7 @@ function forceRefreshCurrentPage() {
 (function () {
   var startY = 0, pulling = false, armed = false;
   var THRESHOLD = 80;       // px of downward drag before it even starts arming
-  var HOLD_MS = 1500;       // must stay pulled past THRESHOLD this long before release triggers a refresh
+  var HOLD_MS = 700;       // must stay pulled past THRESHOLD this long before release triggers a refresh
   var armedAt = null;
 
   function scrollY() {
@@ -896,6 +907,35 @@ function renderTodaySection(data) {
 
 function statBox(num, lbl) {
   return '<div class="stat-box"><div class="num">' + num + '</div><div class="lbl">' + lbl + '</div></div>';
+}
+
+// Combined Net-Profit / Revenue / Expense card for the History page, in the
+// neon style the user picked (layout "3 · แท่งเทียบ"): profit is the hero
+// number, revenue-vs-expense share one comparison bar below it.
+function buildNeonProfitCard(revenue, expense, profit, prevMonthProfit) {
+  revenue = Number(revenue) || 0;
+  expense = Number(expense) || 0;
+  profit = Number(profit) || 0;
+  var total = revenue + expense;
+  var revPct = total > 0 ? (revenue / total * 100) : 50;
+  var expPct = 100 - revPct;
+
+  var momPct = (prevMonthProfit && Number(prevMonthProfit) !== 0)
+    ? ((profit - Number(prevMonthProfit)) / Math.abs(Number(prevMonthProfit)) * 100)
+    : null;
+  var momHtml = momPct === null ? '' :
+    '<div class="neon-hero-sub">' + (momPct >= 0 ? '↑ ' : '↓ ') + Math.abs(momPct).toFixed(1) + '% จากเดือนก่อน</div>';
+
+  return '<div class="neon-card">' +
+    '<div class="neon-hero-lbl">📈 กำไรสุทธิ (Net Profit)</div>' +
+    '<div class="neon-hero-amt">' + fmtNum(profit) + ' ฿</div>' +
+    momHtml +
+    '<div class="neon-compare-track">' +
+      '<div class="seg rev" style="width:' + revPct + '%;">' + fmtNum(revenue) + ' ฿</div>' +
+      '<div class="seg exp" style="width:' + expPct + '%;">' + fmtNum(expense) + ' ฿</div>' +
+    '</div>' +
+    '<div class="neon-legend"><span style="color:#00ffdc;">💰 รายได้ ' + revPct.toFixed(0) + '%</span><span style="color:#ff2fd0;">💸 รายจ่าย ' + expPct.toFixed(0) + '%</span></div>' +
+  '</div>';
 }
 
 // One comparison row for the History MoM card: label, this-month value, vs
@@ -1668,18 +1708,13 @@ function renderHistoryMonthly(data) {
   html += statBox(fmtNum(t.targetDays), 'วันถึงเป้า 🥇');
   html += '</div>';
 
-  // 2) Trend — full month's daily net-profit line, same chart used on Home
-  html += '<div class="card"><div class="card-title">แนวโน้มกำไรรายวัน — เดือนนี้</div>';
-  html += '<div class="sparkline-wrap" style="margin-top:6px;">' + buildMetricSparkline(data.days, 'netProfit', data.days.length) + '</div>';
-  html += '</div>';
+  // 2) Combined summary card — Net Profit hero + Revenue-vs-Expense compare
+  // bar in one card (replaces the old separate trend+donut cards; the donut
+  // had a real bug — buildDonutCard expects {name,...} but was given
+  // {label,...}, so both legend rows showed "undefined")
+  html += buildNeonProfitCard(t.revenue, t.totalExp, t.netProfit, data.prevMonthProfit);
 
-  // 3) Revenue vs Expense donut for the month
-  html += buildDonutCard('สัดส่วนรายได้ vs รายจ่าย — เดือนนี้', [
-    { label: 'รายได้', value: Number(t.revenue) || 0, color: '#00B900' },
-    { label: 'รายจ่าย', value: Number(t.totalExp) || 0, color: '#f43f5e' }
-  ]);
-
-  // 4) Full daily table
+  // 3) Full daily table
   html += renderFullDailyTable(data.days);
 
   // 3) KPI calendar
