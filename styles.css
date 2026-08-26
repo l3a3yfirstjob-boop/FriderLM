@@ -251,6 +251,24 @@
   .mom-stat-cur { font-weight: 900; }
   .mom-stat-chip { font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 20px; flex-shrink: 0; white-space: nowrap; }
 
+  /* Neon combined summary card (History page) — chosen style: profit hero + revenue/expense compare bar */
+  .neon-card {
+    background: #0d0818;
+    border: 1px solid rgba(0,255,220,0.3);
+    border-radius: 20px;
+    padding: 18px;
+    box-shadow: 0 0 0 1px rgba(0,255,220,0.05), 0 0 34px rgba(0,255,220,0.12), inset 0 0 40px rgba(160,32,240,0.06);
+    margin-bottom: 10px;
+  }
+  .neon-hero-lbl { font-size: 12px; font-weight: 900; text-align:center; color: #00ffdc; text-shadow: 0 0 8px rgba(0,255,220,0.7); }
+  .neon-hero-amt { font-size: 30px; font-weight: 900; text-align:center; margin: 4px 0; color: #fff; text-shadow: 0 0 14px rgba(0,255,220,0.5); }
+  .neon-hero-sub { font-size: 11px; text-align:center; margin-bottom: 14px; color: #ff2fd0; text-shadow: 0 0 8px rgba(255,47,208,0.6); }
+  .neon-compare-track { display: flex; height: 26px; border-radius: 8px; overflow: hidden; margin-top: 4px; box-shadow: 0 0 16px rgba(0,255,220,0.2); }
+  .neon-compare-track .seg { display:flex; align-items:center; font-size:11px; font-weight:900; white-space: nowrap; overflow: hidden; }
+  .neon-compare-track .rev { background: linear-gradient(90deg, #00b98c, #00ffdc); color:#04210a; padding-left:8px; }
+  .neon-compare-track .exp { background: linear-gradient(90deg, #ff2fd0, #ff6bdf); color:#1a0014; justify-content:flex-end; padding-right:8px; }
+  .neon-legend { display: flex; justify-content: space-between; margin-top: 8px; font-size: 10px; }
+
   /* ===== Command Center home ===== */
   .hero-card { text-align: center; padding: 20px 16px; position: relative; overflow: hidden; }
   .hero-card::before { content: ''; position: absolute; top: -40%; left: 50%; transform: translateX(-50%); width: 220px; height: 220px; background: radial-gradient(circle, rgba(0,185,0,0.25), transparent 70%); pointer-events: none; }
@@ -380,17 +398,20 @@
   .pin-dots { display: flex; justify-content: center; gap: 14px; margin: 18px 0 10px; }
   .pin-dots .pd { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); transition: .15s; }
   .pin-dots .pd.filled { background: var(--brand); border-color: var(--brand); box-shadow: 0 0 10px rgba(0,185,0,0.6); }
-  .pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 10px 0 18px; }
+  .pin-dots.pin-error .pd.filled { background: var(--danger); border-color: var(--danger); box-shadow: 0 0 10px rgba(244,63,94,0.6); }
+  .pin-dots.pin-shake { animation: pinShake .4s; }
+  @keyframes pinShake { 0%,100%{transform:translateX(0);} 20%{transform:translateX(-8px);} 40%{transform:translateX(8px);} 60%{transform:translateX(-6px);} 80%{transform:translateX(6px);} }
+
+  /* Flat, larger style (chosen after comparing mockups) — no glass/blur, bigger keys */
+  .pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 10px auto 18px; max-width: 300px; }
   .pin-key {
-    aspect-ratio: 1; border-radius: 50%; font-size: 22px; font-weight: 800; color: var(--text);
-    background: linear-gradient(160deg, rgba(255,255,255,0.14), rgba(255,255,255,0.02));
-    backdrop-filter: blur(14px) saturate(160%); -webkit-backdrop-filter: blur(14px) saturate(160%);
-    border: 1px solid rgba(255,255,255,0.16);
-    box-shadow: 0 4px 14px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.15);
+    aspect-ratio: 1; border-radius: 50%; font-size: 26px; font-weight: 700; color: var(--text);
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
     display: flex; align-items: center; justify-content: center; transition: .1s;
   }
-  html[data-theme="light"] .pin-key { background: linear-gradient(160deg, rgba(255,255,255,0.7), rgba(255,255,255,0.3)); border-color: rgba(255,255,255,0.6); color: var(--text); }
-  .pin-key:active { transform: scale(0.92); background: linear-gradient(160deg, rgba(0,185,0,0.3), rgba(0,185,0,0.08)); }
+  html[data-theme="light"] .pin-key { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.1); color: var(--text); }
+  .pin-key:active { background: rgba(255,255,255,0.14); }
   .pin-key.empty { background: transparent; border: none; box-shadow: none; }
 
   /* =========================================================================
