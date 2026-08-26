@@ -655,6 +655,21 @@
     background: rgba(0, 0, 0, 0.08);
   }
 
+  /* Light theme support for the History Net-Profit neon card */
+  html[data-theme="light"] .neon-card {
+    background: rgba(255, 255, 255, 0.92);
+    border-color: rgba(0, 210, 106, 0.35);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  html[data-theme="light"] .neon-hero-lbl { color: #059669; text-shadow: none; }
+  html[data-theme="light"] .neon-hero-amt { color: #1e293b; text-shadow: none; }
+  html[data-theme="light"] .neon-hero-sub { color: #db2777; text-shadow: none; }
+  html[data-theme="light"] .neon-compare-track { box-shadow: none; }
+  html[data-theme="light"] .neon-legend { color: #475569; }
+  html[data-theme="light"] .neon-stat-row { border-top-color: rgba(0,0,0,0.08); }
+  html[data-theme="light"] .neon-stat .val { color: #1e293b; }
+  html[data-theme="light"] .neon-stat .lbl { color: #64748b; }
+
   html[data-theme="light"] .neon-hud-card {
     background: rgba(255, 255, 255, 0.92);
     border-color: rgba(0, 0, 0, 0.1);
