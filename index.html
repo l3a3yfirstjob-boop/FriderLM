@@ -17,7 +17,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="apple-touch-icon.png">
 
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
 
@@ -47,10 +47,12 @@
   <div class="page" id="page-finance">
     <div class="date-nav">
       <button onclick="financeShiftDate(-1)">‹</button>
-      <div class="date-label" id="financeDateLabel" onclick="document.getElementById('financeDatePicker').showPicker ? document.getElementById('financeDatePicker').showPicker() : document.getElementById('financeDatePicker').click()">--</div>
+      <div class="date-label-wrap">
+        <div class="date-label" id="financeDateLabel">--</div>
+        <input type="date" id="financeDatePicker" class="date-label-overlay" onchange="financeJumpToDate(this.value)">
+      </div>
       <button onclick="financeShiftDate(1)">›</button>
     </div>
-    <input type="date" id="financeDatePicker" style="position:absolute; opacity:0; pointer-events:none; width:1px; height:1px;" onchange="financeJumpToDate(this.value)">
     <div id="financeContent">
       <div class="spinner"></div>
     </div>
@@ -60,10 +62,12 @@
   <div class="page" id="page-analysis">
     <div class="date-nav">
       <button onclick="analysisShiftDate(-1)">‹</button>
-      <div class="date-label" id="analysisDateLabel" onclick="document.getElementById('analysisDatePicker').showPicker ? document.getElementById('analysisDatePicker').showPicker() : document.getElementById('analysisDatePicker').click()">--</div>
+      <div class="date-label-wrap">
+        <div class="date-label" id="analysisDateLabel">--</div>
+        <input type="date" id="analysisDatePicker" class="date-label-overlay" onchange="analysisJumpToDate(this.value)">
+      </div>
       <button onclick="analysisShiftDate(1)">›</button>
     </div>
-    <input type="date" id="analysisDatePicker" style="position:absolute; opacity:0; pointer-events:none; width:1px; height:1px;" onchange="analysisJumpToDate(this.value)">
     <div id="analysisContent">
       <div class="spinner"></div>
     </div>
@@ -722,6 +726,6 @@
   </div>
 
   <script src="api-shim.js?v=2"></script>
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
