@@ -37,19 +37,20 @@ var FIELDS = [
   { key: 'mode', label: 'โหมดวันนี้ (Mode)', type: 'select', dd: 'MODE' },
   { key: 'jobs', label: 'จำนวนงาน (Jobs)', type: 'number', quick: [10, 13, 16, 19, 22] },
   { key: 'fare', label: 'ค่าโดยสารรวม (Fare)', type: 'number', cat: 'rev' },
-  { key: 'distance', label: 'ระยะทางรวม (กม.)', type: 'number', cat: 'dist' },
-  { key: 'hours', label: 'ชั่วโมงทำงาน', type: 'number', cat: 'time' },
-  { key: 'minutes', label: 'นาที', type: 'number', cat: 'time' },
-  { key: 'kwh', label: 'หน่วยไฟที่ชาร์จ (kWh)', type: 'number', cat: 'dist' },
   { key: 'appFee', label: 'App Fee', type: 'number', cat: 'exp' },
   { key: 'energy', label: 'ค่าไฟ/ชาร์จรถ (Energy)', type: 'number', cat: 'exp' },
-  { key: 'otherIncome', label: 'รายได้อื่นๆ (บาท)', type: 'number', cat: 'rev' },
+  { key: 'kwh', label: 'หน่วยไฟที่ชาร์จ (kWh)', type: 'number', cat: 'dist' },
+  { key: 'hours', label: 'ชั่วโมงทำงาน', type: 'number', cat: 'time' },
+  { key: 'minutes', label: 'นาที', type: 'number', cat: 'time' },
+  { key: 'distance', label: 'ระยะทางรวม (กม.)', type: 'number', cat: 'dist' },
   { key: 'incomeNote', label: 'ประเภทรายได้อื่นๆ', type: 'select', dd: 'INCOME_NOTE', cat: 'rev' },
-  { key: 'otherExp', label: 'ค่าใช้จ่ายอื่นๆ (บาท)', type: 'number', cat: 'exp' },
-  { key: 'expNote', label: 'ประเภทค่าใช้จ่ายอื่นๆ', type: 'select', dd: 'EXP_NOTE', cat: 'exp' }
+  { key: 'otherIncome', label: 'รายได้อื่นๆ (บาท)', type: 'number', cat: 'rev', showIf: 'incomeNote' },
+  { key: 'expNote', label: 'ประเภทค่าใช้จ่ายอื่นๆ', type: 'select', dd: 'EXP_NOTE', cat: 'exp' },
+  { key: 'otherExp', label: 'ค่าใช้จ่ายอื่นๆ (บาท)', type: 'number', cat: 'exp', showIf: 'expNote' }
 ];
 
 var READONLY_FIELDS = [
+  { key: 'fare', label: 'ค่าโดยสารรวม (Fare)' },
   { key: 'incD', label: 'อินเซนทีฟรายวัน (Inc.D)' },
   { key: 'incW', label: 'อินเซนทีฟรายสัปดาห์ (Inc.W)' },
   { key: 'cashback', label: 'เงินคืนค่ารถ (Cashback 890)' },
@@ -390,7 +391,18 @@ function renderFieldForm(entry, idPrefix) {
     if (val === undefined || val === '-') val = '';
     var isEmpty = (val === '' || val === null || val === undefined);
     var catCls = f.cat ? ' field-' + f.cat : '';
-    html += '<div class="field-wrap' + catCls + '">';
+
+    // Fields with showIf only appear once their trigger dropdown has a value
+    // picked — e.g. the "รายได้อื่นๆ (บาท)" amount box stays hidden until a
+    // category is chosen in "ประเภทรายได้อื่นๆ", so there's nowhere to type
+    // a number before a category exists for it.
+    var hiddenNow = false;
+    if (f.showIf) {
+      var triggerVal = entry ? entry[f.showIf] : '';
+      hiddenNow = (triggerVal === '' || triggerVal === undefined || triggerVal === null || triggerVal === '-');
+    }
+
+    html += '<div class="field-wrap' + catCls + (hiddenNow ? ' field-hidden' : '') + '" id="' + idPrefix + '_' + f.key + '_wrap">';
     html += '<label class="field">' + f.label + (isEmpty ? ' <span class="req-star">*</span>' : '') + '</label>';
     if (f.quick) {
       html += '<div class="quick-choice">';
@@ -400,7 +412,8 @@ function renderFieldForm(entry, idPrefix) {
       html += '</div>';
       html += '<input class="form-input" type="number" inputmode="numeric" id="' + idPrefix + '_' + f.key + '" value="' + val + '" placeholder="หรือกรอกเอง">';
     } else if (f.type === 'select') {
-      html += '<select class="form-input" id="' + idPrefix + '_' + f.key + '">' + ddOptionsHtml(APP.dropdowns[f.dd], val) + '</select>';
+      var changeAttr = FIELD_TRIGGERS[f.key] ? ' onchange="toggleShowIf(\'' + idPrefix + '\',\'' + f.key + '\')"' : '';
+      html += '<select class="form-input" id="' + idPrefix + '_' + f.key + '"' + changeAttr + '>' + ddOptionsHtml(APP.dropdowns[f.dd], val) + '</select>';
     } else {
       html += '<input class="form-input" type="number" inputmode="decimal" step="any" id="' + idPrefix + '_' + f.key + '" value="' + val + '" placeholder="0">';
     }
@@ -408,6 +421,25 @@ function renderFieldForm(entry, idPrefix) {
   });
   return html;
 }
+
+// Precomputed once: which field keys are "triggers" that other fields wait
+// on (via showIf), so the dropdown's onchange only gets wired where needed.
+var FIELD_TRIGGERS = {};
+FIELDS.forEach(function (f) { if (f.showIf) FIELD_TRIGGERS[f.showIf] = true; });
+
+// Called when a trigger dropdown (e.g. "ประเภทรายได้อื่นๆ") changes — shows
+// or hides whatever field(s) declared showIf on that dropdown's key.
+function toggleShowIf(idPrefix, triggerKey) {
+  var triggerEl = document.getElementById(idPrefix + '_' + triggerKey);
+  var hasValue = triggerEl && triggerEl.value !== '';
+  FIELDS.forEach(function (f) {
+    if (f.showIf !== triggerKey) return;
+    var wrap = document.getElementById(idPrefix + '_' + f.key + '_wrap');
+    if (!wrap) return;
+    wrap.classList.toggle('field-hidden', !hasValue);
+  });
+}
+
 
 function setQuickChoice(idPrefix, key, val) {
   document.getElementById(idPrefix + '_' + key).value = val;
@@ -1056,6 +1088,13 @@ function financeShiftDate(d) {
   APP.financeDate.setDate(APP.financeDate.getDate() + d);
   loadFinance();
 }
+// Tapping the date label opens a native date picker so the user can jump
+// straight to any day, instead of pressing ‹/› one day at a time.
+function financeJumpToDate(dateStr) {
+  if (!dateStr) return;
+  APP.financeDate = parseDateKey(dateStr);
+  loadFinance();
+}
 function renderFinance(entry, key) {
   var hasData = entry && entry.hasData;
   var startCollapsed = !!hasData; // if already filled, keep it tidy/collapsed; empty day opens ready to fill
@@ -1253,6 +1292,11 @@ function prefetchAnalysisAround_(centerDate) {
 }
 function analysisShiftDate(d) {
   APP.analysisDate.setDate(APP.analysisDate.getDate() + d);
+  loadAnalysis();
+}
+function analysisJumpToDate(dateStr) {
+  if (!dateStr) return;
+  APP.analysisDate = parseDateKey(dateStr);
   loadAnalysis();
 }
 function renderAnalysisPage(data) {
