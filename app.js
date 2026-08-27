@@ -369,10 +369,12 @@ function fmtNum(v) {
   if (typeof v === 'number') return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
   return v;
 }
+var _toastHideTimer_ = null;
 function showToast(msg) {
   var t = document.getElementById('appToast');
   t.innerText = msg; t.classList.add('show');
-  setTimeout(function () { t.classList.remove('show'); }, 2000);
+  if (_toastHideTimer_) clearTimeout(_toastHideTimer_);
+  _toastHideTimer_ = setTimeout(function () { t.classList.remove('show'); }, 2500);
 }
 function ddOptionsHtml(list, selected) {
   var html = '<option value="">— เลือก —</option>';
@@ -1127,7 +1129,13 @@ function toggleFinForm() {
 
 // Single button saves both the Finance fields and the raw Data_Text together.
 function saveFinance(dateStr) {
-  requirePin(function () { checkThenSaveFinance(dateStr); });
+  requirePin(function () {
+    try {
+      checkThenSaveFinance(dateStr);
+    } catch (err) {
+      showToast('❌ เกิดข้อผิดพลาด: ' + (err && err.message ? err.message : err));
+    }
+  });
 }
 function checkThenSaveFinance(dateStr) {
   var payload = collectFieldForm('fin');
@@ -1163,10 +1171,14 @@ function doSaveFinanceAndRaw(dateStr, payload, rawText) {
   google.script.run.withSuccessHandler(function (freshEntry) {
     google.script.run.withSuccessHandler(function () {
       showToast('✅ บันทึกสำเร็จ (ข้อมูลรายวัน + ข้อมูลดิบ)');
-    }).withFailureHandler(showErr).saveRawText(dateStr, rawText);
+    }).withFailureHandler(function (err) {
+      showToast('⚠️ บันทึกข้อมูลรายวันสำเร็จ แต่ข้อมูลดิบพลาด: ' + (err && err.message ? err.message : err));
+    }).saveRawText(dateStr, rawText);
     renderFinance(freshEntry, dateStr);
     loadHome();
-  }).withFailureHandler(showErr).saveDailyEntry(dateStr, payload);
+  }).withFailureHandler(function (err) {
+    showToast('❌ บันทึกไม่สำเร็จ: ' + (err && err.message ? err.message : err));
+  }).saveDailyEntry(dateStr, payload);
 }
 
 /* ============================= QUICK SAVE ============================= */
