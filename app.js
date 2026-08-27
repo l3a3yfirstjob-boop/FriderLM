@@ -1116,6 +1116,10 @@ function renderFinance(entry, key) {
   document.getElementById('financeContent').dataset.hasData = (entry && entry.hasData) ? '1' : '0';
 
   google.script.run.withSuccessHandler(function (raw) {
+    // Guard against out-of-order responses: if the user already navigated to
+    // a different date while this request was in flight, ignore the stale
+    // result instead of overwriting the textarea with the wrong day's text.
+    if (toDateKey(APP.financeDate) !== key) return;
     var ta = document.getElementById('rawTextArea');
     if (ta && raw && raw.rawText) ta.value = raw.rawText;
   }).getRawText(key);
@@ -1252,10 +1256,14 @@ function confirmOverwrite() {
   if (!APP.pendingSave) return;
   var p = APP.pendingSave;
   document.getElementById('overwriteConfirmBox').classList.remove('show');
-  if (p.target === 'finance') {
-    doSaveFinanceAndRaw(p.dateStr, p.payload, p.rawText);
-  } else {
-    doSave(p.dateStr, p.payload, p.target);
+  try {
+    if (p.target === 'finance') {
+      doSaveFinanceAndRaw(p.dateStr, p.payload, p.rawText);
+    } else {
+      doSave(p.dateStr, p.payload, p.target);
+    }
+  } catch (err) {
+    showToast('❌ เกิดข้อผิดพลาด: ' + (err && err.message ? err.message : err));
   }
   APP.pendingSave = null;
 }
