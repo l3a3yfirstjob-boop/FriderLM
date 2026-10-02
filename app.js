@@ -84,8 +84,6 @@ window.addEventListener('DOMContentLoaded', function () {
 /* ============================= PIN LOCK ============================= */
 
 function requirePin(callback) {
-  // Always check fresh from the server — avoids a race where APP.hasPin
-  // hasn't loaded yet on a fresh page load.
   google.script.run.withSuccessHandler(function (st) {
     APP.hasPin = st.hasPin;
     if (!APP.hasPin || APP.pinUnlocked) { callback(); return; }
@@ -278,10 +276,6 @@ function switchPage(name) {
   if (name === 'history') loadHistory();
 }
 
-// Re-runs whichever loadX() belongs to the page currently on screen, after
-// clearing the client-side read cache so it actually re-fetches instead of
-// re-serving the cached result. Used by both the header refresh button and
-// the pull-to-refresh gesture below.
 function forceRefreshCurrentPage() {
   if (window.__friderCache) window.__friderCache.clear();
   var page = APP.currentPage || 'home';
@@ -295,8 +289,8 @@ function forceRefreshCurrentPage() {
 /* ============================= PULL TO REFRESH ============================= */
 (function () {
   var startY = 0, pulling = false, armed = false;
-  var THRESHOLD = 80;       // px of downward drag before it even starts arming
-  var HOLD_MS = 700;       // must stay pulled past THRESHOLD this long before release triggers a refresh
+  var THRESHOLD = 80;
+  var HOLD_MS = 700;
   var armedAt = null;
 
   function scrollY() {
@@ -304,10 +298,6 @@ function forceRefreshCurrentPage() {
   }
 
   document.addEventListener('touchstart', function (e) {
-    // Only arm the gesture if the WHOLE PAGE is scrolled all the way to the
-    // top — checking a specific .page div's scrollTop was wrong (that div
-    // never scrolls itself; the page/window does), which let mid-page swipes
-    // accidentally trigger a refresh. This checks real page scroll position.
     if (scrollY() > 4) { pulling = false; return; }
     startY = e.touches[0].clientY;
     pulling = true;
@@ -320,12 +310,10 @@ function forceRefreshCurrentPage() {
     var dy = e.touches[0].clientY - startY;
     var indicator = document.getElementById('pullRefreshIndicator');
     if (dy < THRESHOLD) {
-      // not pulled far enough yet — reset the hold timer and hide the indicator
       armed = false; armedAt = null;
       if (indicator) indicator.classList.remove('show', 'ready');
       return;
     }
-    // pulled past the distance threshold — start (or continue) the hold timer
     if (!armedAt) armedAt = Date.now();
     var held = Date.now() - armedAt;
     if (indicator) {
@@ -394,10 +382,6 @@ function renderFieldForm(entry, idPrefix) {
     var isEmpty = (val === '' || val === null || val === undefined);
     var catCls = f.cat ? ' field-' + f.cat : '';
 
-    // Fields with showIf only appear once their trigger dropdown has a value
-    // picked — e.g. the "รายได้อื่นๆ (บาท)" amount box stays hidden until a
-    // category is chosen in "ประเภทรายได้อื่นๆ", so there's nowhere to type
-    // a number before a category exists for it.
     var hiddenNow = false;
     if (f.showIf) {
       var triggerVal = entry ? entry[f.showIf] : '';
@@ -424,13 +408,9 @@ function renderFieldForm(entry, idPrefix) {
   return html;
 }
 
-// Precomputed once: which field keys are "triggers" that other fields wait
-// on (via showIf), so the dropdown's onchange only gets wired where needed.
 var FIELD_TRIGGERS = {};
 FIELDS.forEach(function (f) { if (f.showIf) FIELD_TRIGGERS[f.showIf] = true; });
 
-// Called when a trigger dropdown (e.g. "ประเภทรายได้อื่นๆ") changes — shows
-// or hides whatever field(s) declared showIf on that dropdown's key.
 function toggleShowIf(idPrefix, triggerKey) {
   var triggerEl = document.getElementById(idPrefix + '_' + triggerKey);
   var hasValue = triggerEl && triggerEl.value !== '';
@@ -441,7 +421,6 @@ function toggleShowIf(idPrefix, triggerKey) {
     wrap.classList.toggle('field-hidden', !hasValue);
   });
 }
-
 
 function setQuickChoice(idPrefix, key, val) {
   document.getElementById(idPrefix + '_' + key).value = val;
@@ -466,7 +445,6 @@ function countEmptyFields(idPrefix) {
   return n;
 }
 
-// Accounting-style formatting: negatives shown in parentheses + red, per common bookkeeping convention.
 function fmtAcct(v) {
   var num = Number(v);
   if (!isFinite(num) || v === '' || v === undefined || v === null || v === '-') return '<span>—</span>';
@@ -487,7 +465,6 @@ function renderReadonlyResults(entry) {
   });
   html += '</div>';
 
-  // Simple P&L summary — Revenue minus Expense = Net Profit, laid out top to bottom
   html += '<div class="card"><div class="card-title">สรุปกำไรขาดทุน (P&amp;L)</div>';
   html += '<div class="pnl-row"><span>รายได้รวม (Revenue)</span>' + fmtAcct(entry.revenue) + '</div>';
   html += '<div class="pnl-row"><span>หัก: รายจ่ายรวม (Expense)</span>' + fmtAcct(-Math.abs(Number(entry.totalExp) || 0)) + '</div>';
@@ -566,7 +543,6 @@ function renderHome(data) {
   document.getElementById('homeContent').innerHTML = html;
 }
 
-/* ---------- 1. Monthly Goals (Cyber Neon HUD - Concept A) ---------- */
 function renderGoalsSection(data) {
   var g = (data && data.goals) || {};
   var mt = (data && data.monthTotals) || {};
@@ -642,61 +618,18 @@ function renderGoalsSection(data) {
   return html;
 }
 
-/* ---------- 2. Monthly Overview (Cyber Glow 2-Column Grid) ---------- */
 function renderMonthlyOverview(data) {
   var mt = data.monthTotals || {};
   var wc = data.weekCompare;
   var wThis = wc ? wc.thisWeek : null, wLast = wc ? wc.lastWeek : null;
 
   var cards = [
-    {
-      cls: 'glow-green',
-      icon: '💰',
-      label: 'Revenue',
-      val: fmtNum(mt.revenue) + ' ฿',
-      sub: wLast ? tileDeltaHtml(wThis.revenue, wLast.revenue) : 'ยอดรายได้รวม',
-      fill: '85%'
-    },
-    {
-      cls: 'glow-rose',
-      icon: '📈',
-      label: 'Net Profit',
-      val: fmtNum(mt.netProfit) + ' ฿',
-      sub: wLast ? tileDeltaHtml(wThis.netProfit, wLast.netProfit) : 'กำไรสุทธิเดือนนี้',
-      fill: '60%'
-    },
-    {
-      cls: 'glow-blue',
-      icon: '🚕',
-      label: 'Jobs',
-      val: fmtNum(mt.jobs),
-      sub: wLast ? tileDeltaHtml(wThis.jobs, wLast.jobs) : 'จำนวนงานทั้งหมด',
-      fill: '75%'
-    },
-    {
-      cls: 'glow-cyan',
-      icon: '⏰',
-      label: 'Work Time',
-      val: (mt.hoursDecimal || 0).toFixed(0) + ' ชม.',
-      sub: 'เวลาขับรวม',
-      fill: '70%'
-    },
-    {
-      cls: 'glow-amber',
-      icon: '🛣️',
-      label: 'Distance',
-      val: fmtNum(mt.distance) + ' กม.',
-      sub: wLast ? tileDeltaHtml(wThis.distance, wLast.distance) : 'ระยะทางทั้งหมด',
-      fill: '55%'
-    },
-    {
-      cls: 'glow-purple',
-      icon: '📅',
-      label: 'Work Days',
-      val: fmtNum(mt.workingDays) + ' วัน',
-      sub: 'วันทำงานเดือนนี้',
-      fill: '90%'
-    }
+    { cls: 'glow-green', icon: '💰', label: 'Revenue', val: fmtNum(mt.revenue) + ' ฿', sub: wLast ? tileDeltaHtml(wThis.revenue, wLast.revenue) : 'ยอดรายได้รวม', fill: '85%' },
+    { cls: 'glow-rose', icon: '📈', label: 'Net Profit', val: fmtNum(mt.netProfit) + ' ฿', sub: wLast ? tileDeltaHtml(wThis.netProfit, wLast.netProfit) : 'กำไรสุทธิเดือนนี้', fill: '60%' },
+    { cls: 'glow-blue', icon: '🚕', label: 'Jobs', val: fmtNum(mt.jobs), sub: wLast ? tileDeltaHtml(wThis.jobs, wLast.jobs) : 'จำนวนงานทั้งหมด', fill: '75%' },
+    { cls: 'glow-cyan', icon: '⏰', label: 'Work Time', val: (mt.hoursDecimal || 0).toFixed(0) + ' ชม.', sub: 'เวลาขับรวม', fill: '70%' },
+    { cls: 'glow-amber', icon: '🛣️', label: 'Distance', val: fmtNum(mt.distance) + ' กม.', sub: wLast ? tileDeltaHtml(wThis.distance, wLast.distance) : 'ระยะทางทั้งหมด', fill: '55%' },
+    { cls: 'glow-purple', icon: '📅', label: 'Work Days', val: fmtNum(mt.workingDays) + ' วัน', sub: 'วันทำงานเดือนนี้', fill: '90%' }
   ];
 
   var html = '<div class="card"><div class="card-title">ภาพรวมเดือนนี้</div><div class="glow-grid-2">';
@@ -712,7 +645,6 @@ function renderMonthlyOverview(data) {
   return html;
 }
 
-/* ---------- 3. Trend ---------- */
 function renderTrendSection(data) {
   var days = (data.last30 || []).filter(function (d) { return d.hasData; });
   if (days.length < 2) return '';
@@ -755,7 +687,6 @@ function buildMetricSparkline(days, metric, range) {
     '</svg>';
 }
 
-/* ---------- 4. Monthly Calendar (simple traffic-light) ---------- */
 function renderSimpleCalendar(data) {
   var days = data.monthDays || [];
   if (!days.length) return '';
@@ -788,7 +719,6 @@ function renderSimpleCalendar(data) {
   return html;
 }
 
-/* ---------- 5. Performance ---------- */
 function renderPerformanceSection(data) {
   var mt = data.monthTotals || {};
   if (!mt.workingDays) return '';
@@ -803,7 +733,6 @@ function renderPerformanceSection(data) {
   return html;
 }
 
-/* ---------- 6. Efficiency ---------- */
 function renderEfficiencySection(data) {
   var mt = data.monthTotals || {};
   if (!mt.workingDays) return '';
@@ -817,7 +746,6 @@ function renderEfficiencySection(data) {
   return html;
 }
 
-/* ---------- 7. Week vs Previous Week ---------- */
 function renderWeekCompareSection(data) {
   var wc = data.weekCompare;
   if (!wc || !wc.lastWeek) return '';
@@ -839,7 +767,6 @@ function renderWeekCompareSection(data) {
   return html;
 }
 
-/* ---------- 8. Personal Records (this month) ---------- */
 function renderRecordsSection(data) {
   var days = (data.monthDays || []).filter(function (d) { return d.hasData; });
   if (!days.length) return '';
@@ -860,14 +787,12 @@ function recordRow(label, day, valueStr) {
   return '<div class="row" onclick="goToAnalysisDate(\'' + day.dateStr + '\')" style="cursor:pointer;"><span class="lbl">' + label + '</span><span class="val">' + valueStr + ' <span style="font-size:11px; color:var(--text-sub);">(วันที่ ' + day.day + ')</span></span></div>';
 }
 
-/* ---------- 9. Streak ---------- */
 function renderStreakSection(data) {
   var streak = data.streak || 0;
   if (streak < 1) return '';
   return '<div class="card" style="text-align:center;"><div style="font-size:28px; font-weight:900; color:var(--brand);">🔥 ' + streak + ' วัน</div><div style="font-size:12px; color:var(--text-sub);">ถึงเป้า 🥇 ติดต่อกัน</div></div>';
 }
 
-/* ---------- 10. Frider Insight (rule-based, free) ---------- */
 function renderInsightSection(data) {
   var days = (data.last30 || []).filter(function (d) { return d.hasData; });
   if (days.length < 8) return '';
@@ -904,7 +829,6 @@ function renderInsightSection(data) {
 
   var last7Profit = avg(last7, 'netProfit');
   var priorProfit = avg(prior, 'netProfit');
-  var last7Hours = last7.length; // rough proxy; kept qualitative only
   if (priorProfit !== 0) {
     var profitChange = ((last7Profit - priorProfit) / Math.abs(priorProfit)) * 100;
     if (profitChange >= 8) insights.push({ type: 'good', text: 'กำไรเฉลี่ยต่อวันสัปดาห์นี้ดีขึ้น ' + profitChange.toFixed(1) + '% เทียบก่อนหน้า' });
@@ -922,7 +846,6 @@ function renderInsightSection(data) {
   return html;
 }
 
-/* ---------- 11. Today (de-emphasized, near bottom) ---------- */
 function renderTodaySection(data) {
   var t = data.today;
   var hasToday = t && t.exists && t.hasData;
@@ -943,9 +866,6 @@ function statBox(num, lbl) {
   return '<div class="stat-box"><div class="num">' + num + '</div><div class="lbl">' + lbl + '</div></div>';
 }
 
-// Combined Net-Profit / Revenue / Expense card for the History page, in the
-// neon style the user picked (layout "3 · แท่งเทียบ"): profit is the hero
-// number, revenue-vs-expense share one comparison bar below it.
 function buildNeonProfitCard(revenue, expense, profit, prevMonthProfit, workingDays, jobs, targetDays) {
   revenue = Number(revenue) || 0;
   expense = Number(expense) || 0;
@@ -982,9 +902,28 @@ function buildNeonProfitCard(revenue, expense, profit, prevMonthProfit, workingD
   '</div>';
 }
 
-// One comparison row for the History MoM card: label, this-month value, vs
-// last-month value, with a %-change chip. unit is appended after the number
-// ('฿' for money, '' for a plain count like job count).
+// NEW: renders a "งานแยกโหมด" card from a modeBreakdown array
+// ({ mode, days, jobs, revenue }) — used on both History Monthly and
+// History Lifetime. Pure display of numbers already summed on the backend.
+function buildModeBreakdownCard(title, modeBreakdown) {
+  if (!modeBreakdown || !modeBreakdown.length) return '';
+  var totalJobs = modeBreakdown.reduce(function (s, m) { return s + (Number(m.jobs) || 0); }, 0);
+  if (totalJobs <= 0) return '';
+  var colors = ['#00B900', '#38bdf8', '#f59e0b', '#a78bfa', '#f43f5e'];
+  var html = '<div class="card"><div class="card-title">' + title + '</div>';
+  modeBreakdown.forEach(function (m, i) {
+    var pct = totalJobs ? (Number(m.jobs) || 0) / totalJobs * 100 : 0;
+    var color = colors[i % colors.length];
+    html += '<div style="margin-bottom:10px;">';
+    html += '<div class="row" style="padding:2px 0;"><span class="lbl">' + (m.mode || 'อื่นๆ') + ' <span style="color:var(--text-sub); font-size:11px;">(' + fmtNum(m.days) + ' วัน)</span></span><span class="val">' + fmtNum(m.jobs) + ' งาน (' + pct.toFixed(1) + '%)</span></div>';
+    html += '<div class="week-bar-track"><div class="week-bar-fill" style="width:' + pct.toFixed(1) + '%; background:' + color + ';"></div></div>';
+    html += '<div style="text-align:right; font-size:11px; color:var(--text-sub); margin-top:2px;">รายได้ ' + fmtNum(m.revenue) + ' ฿</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
 function momStatRow(label, curVal, prevVal, unit) {
   curVal = Number(curVal) || 0;
   prevVal = Number(prevVal) || 0;
@@ -1013,9 +952,7 @@ function todayThaiLabel() {
   return thaiDateLabel(new Date());
 }
 
-// Tiny inline SVG line+area chart — no chart library needed. Works for any length trend.
 function buildSparkline(days) {
-  var pts2 = days.filter(function (d) { return d.hasData; });
   var vals = days.map(function (d) { return Number(d.netProfit) || 0; });
   var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
   if (min === max) { min -= 1; max += 1; }
@@ -1035,7 +972,6 @@ function buildSparkline(days) {
     '</svg>';
 }
 
-// Circular progress ring built from conic-gradient — no chart library needed.
 function buildRing(pct, centerNum, centerLabel) {
   var deg = Math.min(360, pct * 3.6);
   var style = 'background: conic-gradient(var(--brand) ' + deg + 'deg, var(--card-2) ' + deg + 'deg); border-radius: 50%; width:100%; height:100%; display:flex; align-items:center; justify-content:center;';
@@ -1090,8 +1026,6 @@ function financeShiftDate(d) {
   APP.financeDate.setDate(APP.financeDate.getDate() + d);
   loadFinance();
 }
-// Tapping the date label opens a native date picker so the user can jump
-// straight to any day, instead of pressing ‹/› one day at a time.
 function financeJumpToDate(dateStr) {
   if (!dateStr) return;
   APP.financeDate = parseDateKey(dateStr);
@@ -1099,7 +1033,7 @@ function financeJumpToDate(dateStr) {
 }
 function renderFinance(entry, key) {
   var hasData = entry && entry.hasData;
-  var startCollapsed = !!hasData; // if already filled, keep it tidy/collapsed; empty day opens ready to fill
+  var startCollapsed = !!hasData;
   var html = '<div class="card">';
   html += '<div class="card-title">กรอกข้อมูลวันนี้</div>';
   html += '<button class="form-toggle-btn" id="finToggleBtn" onclick="toggleFinForm()">' + (startCollapsed ? 'แตะเพื่อแก้ไขข้อมูล ✎' : 'ซ่อนฟอร์ม ▲') + '</button>';
@@ -1116,9 +1050,6 @@ function renderFinance(entry, key) {
   document.getElementById('financeContent').dataset.hasData = (entry && entry.hasData) ? '1' : '0';
 
   google.script.run.withSuccessHandler(function (raw) {
-    // Guard against out-of-order responses: if the user already navigated to
-    // a different date while this request was in flight, ignore the stale
-    // result instead of overwriting the textarea with the wrong day's text.
     if (toDateKey(APP.financeDate) !== key) return;
     var ta = document.getElementById('rawTextArea');
     if (ta && raw && raw.rawText) ta.value = raw.rawText;
@@ -1131,7 +1062,6 @@ function toggleFinForm() {
   btn.innerText = collapsed ? 'แตะเพื่อแก้ไขข้อมูล ✎' : 'ซ่อนฟอร์ม ▲';
 }
 
-// Single button saves both the Finance fields and the raw Data_Text together.
 function saveFinance(dateStr) {
   requirePin(function () {
     try {
@@ -1295,12 +1225,6 @@ function loadAnalysis() {
   }).withFailureHandler(errBox('analysisContent', 'loadAnalysis')).getAnalysisPageData(key);
 }
 
-// Quietly loads getAnalysisPageData for the 3 days before and after the one
-// just viewed, so ±1-3 day navigation feels instant (data is already sitting
-// in the api-shim's read cache by the time the user taps prev/next). No UI
-// update happens here — success handlers are empty, this only warms the cache.
-// Jumping far away (e.g. day 20 -> day 10) is a cache miss as normal, and
-// prefetching simply re-centers around wherever the user lands next.
 function prefetchAnalysisAround_(centerDate) {
   for (var offset = -3; offset <= 3; offset++) {
     if (offset === 0) continue;
@@ -1329,7 +1253,6 @@ function renderAnalysis(entry, trend7, modeRadar, deep) {
   }
   var html = '';
 
-  // Hero summary
   var netProfit = Number(entry.netProfit) || 0;
   html += '<div class="card hero-card">';
   html += '<div class="hero-date">' + fmtNum(entry.mode) + ' • ' + fmtNum(entry.jobs) + ' งาน</div>';
@@ -1347,27 +1270,23 @@ function renderAnalysis(entry, trend7, modeRadar, deep) {
   if (entry.kpiStatus) html += '<div style="margin-top:8px;"><span class="kpi-pill">' + entry.kpiStatus + '</span></div>';
   html += '</div>';
 
-  // Filter pills
   html += '<div class="filter-pills" id="analysisFilterPills">';
   [['all', 'ทั้งหมด'], ['rev', 'รายได้'], ['exp', 'รายจ่าย'], ['eff', 'ประสิทธิภาพ'], ['dist', 'ระยะทาง-เวลา']].forEach(function (f) {
     html += '<button class="filter-pill' + (f[0] === 'all' ? ' active' : '') + '" data-filter="' + f[0] + '" onclick="setAnalysisFilter(\'' + f[0] + '\')">' + f[1] + '</button>';
   });
   html += '</div>';
 
-  // Revenue vs expense donut
   var donutItems = [
     { name: 'รายได้', value: Number(entry.revenue) || 0, color: '#00B900' },
     { name: 'รายจ่าย', value: Number(entry.totalExp) || 0, color: '#f43f5e' }
   ];
   html += buildDonutCard('สัดส่วนรายได้ vs รายจ่าย', donutItems);
 
-  // Revenue / Expense — bento tiles that expand into full detail
   html += '<div class="bento-grid">';
   html += '<div class="bento-tile revenue" onclick="toggleAcc(\'acc_rev\')"><div class="bt-label">รายได้รวม</div><div class="bt-amt">' + fmtNum(entry.revenue) + ' ฿</div><div class="bt-hint">แตะดูรายละเอียด ▾</div></div>';
   html += '<div class="bento-tile expense" onclick="toggleAcc(\'acc_exp\')"><div class="bt-label">รายจ่ายรวม</div><div class="bt-amt">' + fmtNum(entry.totalExp) + ' ฿</div><div class="bt-hint">แตะดูรายละเอียด ▾</div></div>';
   html += '</div>';
 
-  // Revenue detail (collapsed by default — opened from the bento tile above)
   html += '<div class="card an-cat card-revenue" data-cat="rev">';
   html += '<div class="acc-body collapsed" id="acc_rev">';
   html += '<div class="card-title">รายได้แยกส่วน</div>';
@@ -1380,7 +1299,6 @@ function renderAnalysis(entry, trend7, modeRadar, deep) {
   html += '<div class="row"><span class="lbl"><b>รวมรายได้</b></span><span class="val pos"><b>' + fmtNum(entry.revenue) + ' ฿</b></span></div>';
   html += '</div></div>';
 
-  // Expense detail (collapsed by default)
   html += '<div class="card an-cat card-expense" data-cat="exp">';
   html += '<div class="acc-body collapsed" id="acc_exp">';
   html += '<div class="card-title">รายจ่าย</div>';
@@ -1392,20 +1310,15 @@ function renderAnalysis(entry, trend7, modeRadar, deep) {
   html += '<div class="row"><span class="lbl"><b>รวมรายจ่าย</b></span><span class="val neg"><b>' + fmtNum(entry.totalExp) + ' ฿</b></span></div>';
   html += '</div></div>';
 
-  // Distance/time
   html += '<div class="card an-cat" data-cat="dist"><div class="card-title">ระยะทาง/เวลา/ไฟ</div>';
   html += iconRow('dist', '🛣', 'ระยะทาง', fmtNum(entry.distance) + ' กม.');
   html += iconRow('dist', '⏱', 'ชั่วโมงทำงาน', fmtNum(entry.hours) + ' ชม. ' + fmtNum(entry.minutes) + ' นาที');
   html += iconRow('dist', '🔋', 'หน่วยไฟที่ชาร์จ', fmtNum(entry.kwh) + ' kWh');
   html += '</div>';
 
-  // Efficiency (derived, display-only)
   html += renderDerivedYield(entry);
-
-  // Deep analytics from Data_Text (job-level raw data), when available for this date
   html += renderDeepAnalytics(deep);
 
-  // Mode radar
   if (modeRadar && modeRadar.modes && modeRadar.modes.length >= 2) {
     html += buildRadarCard(modeRadar.modes);
   }
@@ -1426,7 +1339,6 @@ function renderDeepAnalytics(deep) {
   }
   var html = '';
 
-  // Deadhead / job utilization
   html += '<div class="card an-cat" data-cat="dist"><div class="card-title">ระยะทางที่ใช้ทำงานจริง (Job Utilization)</div>';
   if (deep.utilizationPct !== null) {
     html += '<div class="progress-track"><div class="progress-fill" style="width:' + Math.min(100, Math.round(deep.utilizationPct)) + '%;"></div></div>';
@@ -1437,7 +1349,6 @@ function renderDeepAnalytics(deep) {
   html += iconRow('dist', '🛣', 'ระยะทางวิ่งเปล่า (Deadhead)', fmtNum(deep.nonJobDistance) + ' กม.');
   html += '</div>';
 
-  // Mode breakdown donut — split by revenue (฿), with job-count ratio noted per line
   if (deep.modeBreakdown && deep.modeBreakdown.length) {
     var totalJobsAll = deep.modeBreakdown.reduce(function (s, m) { return s + m.count; }, 0);
     var modeItems = deep.modeBreakdown.map(function (m) {
@@ -1447,7 +1358,6 @@ function renderDeepAnalytics(deep) {
     html += buildDonutCard('สัดส่วนประเภทงาน (Mode Breakdown) — วงกลมแบ่งตามรายได้ ฿', modeItems);
   }
 
-  // Hourly earnings bar chart
   var activeHours = deep.hourly.filter(function (h) { return h.fare > 0; });
   if (activeHours.length) {
     var maxFare = Math.max.apply(null, deep.hourly.map(function (h) { return h.fare; }).concat([1]));
@@ -1463,7 +1373,6 @@ function renderDeepAnalytics(deep) {
     html += '</div>';
   }
 
-  // Job ledger
   if (deep.jobs && deep.jobs.length) {
     var totalJobsCount = deep.jobs.length;
     html += '<div class="card an-cat" data-cat="dist"><div class="card-title">รายการงานละเอียด (' + totalJobsCount + ' งาน)</div>';
@@ -1562,9 +1471,6 @@ function applyAnalysisFilter() {
   });
 }
 
-// Simple arithmetic on values the Sheet already gave us for this one day.
-// Not a Sheet formula duplication — the Sheet has no per-day version of these ratios
-// (only month-level averages in MONTHLY_DASHBOARD). Display-only, never written back.
 function renderDerivedYield(entry) {
   var jobs = Number(entry.jobs) || 0;
   var distance = Number(entry.distance) || 0;
@@ -1625,8 +1531,6 @@ function loadHistory() {
   }
 }
 
-// Same idea as prefetchAnalysisAround_ but for months either side of the
-// one just viewed — warms the cache silently, no UI change.
 function prefetchHistoryAround_(month, year) {
   for (var offset = -2; offset <= 2; offset++) {
     if (offset === 0) continue;
@@ -1681,8 +1585,8 @@ function kpiCellClass(day) {
 
 function renderKpiCalendar(days, year, month) {
   var dowLabels = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
-  var firstDow = new Date(year, month - 1, 1).getDay(); // 0=Sun
-  var leadEmpty = (firstDow === 0) ? 6 : (firstDow - 1); // cells before day 1
+  var firstDow = new Date(year, month - 1, 1).getDay();
+  var leadEmpty = (firstDow === 0) ? 6 : (firstDow - 1);
 
   var html = '<div class="card"><div class="card-title">ปฏิทิน KPI</div>';
   html += '<div class="cal-grid">';
@@ -1771,27 +1675,20 @@ function renderHistoryMonthly(data) {
     return;
   }
 
-  // 1) Combined summary card — Net Profit hero, Revenue-vs-Expense compare
-  // bar, and the work-stats (days/jobs/target-days-hit) all in one card, on
-  // top of the page. Replaces the old separate hero + stat-box-grid + broken
-  // donut cards (buildDonutCard expected {name,...} but got {label,...},
-  // so both legend rows showed "undefined").
   html += buildNeonProfitCard(t.revenue, t.totalExp, t.netProfit, data.prevMonthProfit, t.workingDays, t.jobs, t.targetDays);
 
-  // 2) Full daily table
-  html += renderFullDailyTable(data.days);
+  // NEW: งานแยกโหมด (mode breakdown) card — added, does NOT replace anything below.
+  html += buildModeBreakdownCard('🚕 งานแยกโหมด (เดือนนี้)', data.modeBreakdown);
 
-  // 3) KPI calendar
+  html += renderFullDailyTable(data.days);
   html += renderKpiCalendar(data.days, data.year, data.month);
 
-  // 4) MoM — now compares Revenue, Jobs, and Net Profit vs previous month (not just profit)
   html += '<div class="card"><div class="card-title">เทียบเดือนก่อน (MoM)</div>';
   html += momStatRow('รายได้', t.revenue, data.prevMonthRevenue, '฿');
   html += momStatRow('งาน', t.jobs, data.prevMonthJobs, '');
   html += momStatRow('กำไรสุทธิ', t.netProfit, data.prevMonthProfit, '฿');
   html += '</div>';
 
-  // 5) Revenue breakdown
   html += '<div class="card"><div class="card-title">รายได้แยกส่วน</div>';
   html += metricRow('ค่าโดยสาร', t.fare);
   html += metricRow('อินเซนทีฟรายวัน', t.incD);
@@ -1802,7 +1699,6 @@ function renderHistoryMonthly(data) {
   html += '<div class="row"><span class="lbl"><b>รวมรายได้</b></span><span class="val pos"><b>' + fmtNum(t.revenue) + ' ฿</b></span></div>';
   html += '</div>';
 
-  // 6) Expense breakdown
   html += '<div class="card"><div class="card-title">รายจ่ายแยกส่วน</div>';
   html += metricRow('ค่าเช่ารถ', t.carRent);
   html += metricRow('App Fee', t.appFee);
@@ -1813,7 +1709,6 @@ function renderHistoryMonthly(data) {
   html += '<div class="row"><span class="lbl">% กำไรขั้นต้น</span><span class="val">' + (t.profitMarginPct || 0).toFixed(1) + '%</span></div>';
   html += '</div>';
 
-  // 7) Weekly recap
   if (data.weeks && data.weeks.length) {
     html += '<div class="card"><div class="card-title">สรุปกำไรรายสัปดาห์</div>';
     var maxAbs = Math.max.apply(null, data.weeks.map(function (w) { return Math.abs(w.netProfit); }).concat([1]));
@@ -1825,7 +1720,6 @@ function renderHistoryMonthly(data) {
     html += '</div>';
   }
 
-  // 8) Efficiency
   html += '<div class="card"><div class="card-title">ประสิทธิภาพต่องาน/ชั่วโมง</div>';
   html += metricRow('กำไรเฉลี่ย/วัน', t.avgProfitPerDay, ' ฿');
   html += metricRow('งานเฉลี่ย/วัน', t.avgJobsPerDay, ' งาน');
@@ -1838,7 +1732,6 @@ function renderHistoryMonthly(data) {
   html += metricRow('เวลาเฉลี่ย/งาน', t.avgTimePerJobMin, ' นาที');
   html += '</div>';
 
-  // 9) EV
   html += '<div class="card"><div class="card-title">ต้นทุน EV (EV Cost/km)</div>';
   html += metricRow('ค่าไฟ/กม.', t.energyCostPerKm, ' ฿');
   html += metricRow('ค่าเช่ารถ/กม.', t.carRentPerKm, ' ฿');
@@ -1859,23 +1752,108 @@ function metricRow(label, value, unit) {
   return '<div class="row"><span class="lbl">' + label + '</span><span class="val">' + display + (unit || ' ฿') + '</span></div>';
 }
 
+// REWRITTEN: now renders the full all-time totals from getAllTimeTotals_()
+// on the backend — revenue, every expense line (including total car rent
+// and energy cost paid to date), net profit, mode breakdown, and the same
+// efficiency/EV-cost metrics the Monthly view has, but summed across every
+// single day ever recorded instead of one month.
 function renderHistoryLifetime(data) {
-  var metrics = (data && data.metrics) || [];
-  var icons = ['💰', '🚗', '📈', '🚕', '📅', '📊', '📈', '🥇', '🛡️'];
-  var glowStyles = ['glow-green', 'glow-amber', 'glow-rose', 'glow-blue', 'glow-purple', 'glow-cyan', 'glow-green', 'glow-rose', 'glow-blue'];
-  
-  var html = '<div class="card"><div class="card-title">🏆 สรุปตลอดอายุการใช้งาน</div><div class="glow-grid-2">';
-  metrics.forEach(function (m, i) {
-    var gCls = glowStyles[i % glowStyles.length];
-    var ic = icons[i % icons.length];
-    html += '<div class="glow-card ' + gCls + '">';
-    html += '<div class="card-top"><span>' + ic + '</span><span>' + m.label + '</span></div>';
-    html += '<div class="card-mid">' + fmtNum(m.value) + '</div>';
-    html += '<div class="card-subtext">สถิติตลอดอายุ</div>';
+  var t = (data && data.allTime) || null;
+
+  if (!t) {
+    var metrics = (data && data.metrics) || [];
+    if (!metrics.length) {
+      document.getElementById('historyContent').innerHTML = '<div class="card empty-hint">ยังไม่มีข้อมูล</div>';
+      return;
+    }
+    var icons = ['💰', '🚗', '📈', '🚕', '📅', '📊', '📈', '🥇', '🛡️'];
+    var glowStyles = ['glow-green', 'glow-amber', 'glow-rose', 'glow-blue', 'glow-purple', 'glow-cyan', 'glow-green', 'glow-rose', 'glow-blue'];
+    var html0 = '<div class="card"><div class="card-title">🏆 สรุปตลอดอายุการใช้งาน</div><div class="glow-grid-2">';
+    metrics.forEach(function (m, i) {
+      html0 += '<div class="glow-card ' + glowStyles[i % glowStyles.length] + '">';
+      html0 += '<div class="card-top"><span>' + icons[i % icons.length] + '</span><span>' + m.label + '</span></div>';
+      html0 += '<div class="card-mid">' + fmtNum(m.value) + '</div>';
+      html0 += '<div class="card-subtext">สถิติตลอดอายุ</div>';
+      html0 += '<div class="card-bar-bg"><div class="card-bar-fill" style="width:80%;"></div></div>';
+      html0 += '</div>';
+    });
+    html0 += '</div></div>';
+    document.getElementById('historyContent').innerHTML = html0;
+    return;
+  }
+
+  var html = '';
+
+  if (t.firstDateStr && t.lastDateStr) {
+    html += '<div class="card" style="text-align:center;">';
+    html += '<div style="font-size:12px; color:var(--text-sub); font-weight:700;">ข้อมูลสะสมตั้งแต่ ' + t.firstDateStr + ' ถึง ' + t.lastDateStr + '</div>';
+    html += '</div>';
+  }
+
+  html += buildNeonProfitCard(t.revenue, t.totalExp, t.netProfit, null, t.workingDays, t.jobs, t.targetDays);
+
+  var cards = [
+    { cls: 'glow-green', icon: '💰', label: 'Revenue รวม', val: fmtNum(t.revenue) + ' ฿' },
+    { cls: 'glow-rose', icon: '📈', label: 'Net Profit รวม', val: fmtNum(t.netProfit) + ' ฿' },
+    { cls: 'glow-blue', icon: '🚕', label: 'Jobs รวม', val: fmtNum(t.jobs) },
+    { cls: 'glow-cyan', icon: '⏰', label: 'Work Time รวม', val: (t.hoursDecimal || 0).toFixed(0) + ' ชม.' },
+    { cls: 'glow-amber', icon: '🛣️', label: 'Distance รวม', val: fmtNum(t.distance) + ' กม.' },
+    { cls: 'glow-purple', icon: '📅', label: 'Work Days รวม', val: fmtNum(t.workingDays) + ' วัน' }
+  ];
+  html += '<div class="card"><div class="card-title">ภาพรวมตลอดอายุการใช้งาน</div><div class="glow-grid-2">';
+  cards.forEach(function (c) {
+    html += '<div class="glow-card ' + c.cls + '">';
+    html += '<div class="card-top"><span>' + c.icon + '</span><span>' + c.label + '</span></div>';
+    html += '<div class="card-mid">' + c.val + '</div>';
     html += '<div class="card-bar-bg"><div class="card-bar-fill" style="width:80%;"></div></div>';
     html += '</div>';
   });
   html += '</div></div>';
+
+  html += buildModeBreakdownCard('🚕 งานแยกโหมด (ตลอดอายุการใช้งาน)', t.modeBreakdown);
+
+  html += '<div class="card"><div class="card-title">รายได้แยกส่วน (รวมทั้งหมด)</div>';
+  html += metricRow('ค่าโดยสาร', t.fare);
+  html += metricRow('อินเซนทีฟรายวัน', t.incD);
+  html += metricRow('อินเซนทีฟรายสัปดาห์', t.incW);
+  html += metricRow('เงินคืนค่ารถ (890)', t.cashback);
+  html += metricRow('อินเซนทีฟรายเดือน', t.incM);
+  html += metricRow('รายได้อื่นๆ', t.otherIncome);
+  html += '<div class="row"><span class="lbl"><b>รวมรายได้ทั้งหมด</b></span><span class="val pos"><b>' + fmtNum(t.revenue) + ' ฿</b></span></div>';
+  html += '</div>';
+
+  html += '<div class="card"><div class="card-title">รายจ่ายแยกส่วน (รวมทั้งหมด)</div>';
+  html += metricRow('ค่าเช่ารถ (รวมทั้งหมดที่จ่ายมา)', t.carRent);
+  html += metricRow('App Fee', t.appFee);
+  html += metricRow('ค่าไฟ/ชาร์จ (รวมทั้งหมด)', t.energy);
+  html += metricRow('ค่าใช้จ่ายอื่นๆ', t.otherExp);
+  html += metricRow('ภาษีหัก 3% (WHT)', t.wht);
+  html += '<div class="row"><span class="lbl"><b>รวมรายจ่ายทั้งหมด (ต้นทุนรวม)</b></span><span class="val neg"><b>' + fmtNum(t.totalExp) + ' ฿</b></span></div>';
+  html += '<div class="row"><span class="lbl">% กำไรขั้นต้น</span><span class="val">' + (t.profitMarginPct || 0).toFixed(1) + '%</span></div>';
+  html += '</div>';
+
+  html += '<div class="card"><div class="card-title">ประสิทธิภาพต่องาน/ชั่วโมง (เฉลี่ยตลอดอายุ)</div>';
+  html += metricRow('กำไรเฉลี่ย/วัน', t.avgProfitPerDay, ' ฿');
+  html += metricRow('งานเฉลี่ย/วัน', t.avgJobsPerDay, ' งาน');
+  html += metricRow('กำไร/งาน', t.profitPerJob, ' ฿');
+  html += metricRow('ต้นทุน/งาน', t.costPerJob, ' ฿');
+  html += metricRow('กำไร/กม.', t.profitPerKm, ' ฿');
+  html += metricRow('กำไร/ชม.', t.profitPerHour, ' ฿');
+  html += metricRow('งาน/ชม.', t.avgJobsPerHour, '');
+  html += metricRow('ระยะทางเฉลี่ย/งาน', t.avgDistancePerJob, ' กม.');
+  html += metricRow('เวลาเฉลี่ย/งาน', t.avgTimePerJobMin, ' นาที');
+  html += '</div>';
+
+  html += '<div class="card"><div class="card-title">ต้นทุน EV รวม (EV Cost/km)</div>';
+  html += metricRow('ค่าไฟ/กม.', t.energyCostPerKm, ' ฿');
+  html += metricRow('ค่าเช่ารถ/กม.', t.carRentPerKm, ' ฿');
+  html += metricRow('ต้นทุน EV รวม/กม.', t.evCostPerKm, ' ฿');
+  html += metricRow('สัดส่วนกำไร : ต้นทุน EV', t.evProfitRatio, 'x');
+  html += metricRow('หน่วยไฟรวมที่ชาร์จ (ทั้งหมด)', t.kwh, ' kWh');
+  html += metricRow('ค่าไฟเฉลี่ย', t.avgKwhCost, ' ฿/kWh');
+  html += metricRow('ระยะทาง/หน่วยไฟ', t.kmPerKwh, ' กม./kWh');
+  html += '</div>';
+
   document.getElementById('historyContent').innerHTML = html;
 }
 
@@ -1886,7 +1864,6 @@ function showErr(err) {
   showToast('❌ ' + (err && err.message ? err.message : 'เกิดข้อผิดพลาด'));
 }
 
-// Renders a retry box into a given container instead of leaving a spinner stuck forever.
 function errBox(containerId, retryFnName) {
   return function (err) {
     console.error(err);
