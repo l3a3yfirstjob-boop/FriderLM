@@ -183,25 +183,39 @@ function openSettings() {
     html += '<div id="goalsSettingsBody" style="margin-top:14px;"><div class="spinner"></div></div>';
     body.innerHTML = html;
 
+    var now = new Date();
+    APP.settingsGoalsMonth = now.getMonth() + 1;
+    APP.settingsGoalsYear = now.getFullYear();
     google.script.run.withSuccessHandler(function (goals) {
       renderGoalsSettings(goals);
-    }).getGoals();
+    }).getMonthlyGoals(APP.settingsGoalsMonth, APP.settingsGoalsYear);
   }).getPinStatus();
 }
+// NEW: goals are now per-month and lock permanently once that month ends.
+// Settings always edits the REAL current month's record (the only one
+// that's ever still writable) — g.locked should never be true here in
+// practice, but the guard stays in case of a same-day rollover race.
 function renderGoalsSettings(goals) {
   var wrap = document.getElementById('goalsSettingsBody');
   if (!wrap) return;
+  var g = goals || {};
+  if (g.locked) {
+    wrap.innerHTML = '<div style="font-weight:900; font-size:13px; margin-bottom:8px;">🎯 เป้าหมายเดือนนี้</div>' +
+      '<div class="empty-hint">เดือนนี้ปิดไปแล้ว ไม่สามารถแก้ไขเป้าหมายได้</div>';
+    return;
+  }
   var defs = [
     { key: 'revenue', label: 'Revenue (฿)' },
     { key: 'jobs', label: 'Jobs / KPI (งาน)' },
     { key: 'netProfit', label: 'Net Profit (฿)' }
   ];
-  var html = '<div style="font-weight:900; font-size:13px; margin-bottom:8px;">🎯 เป้าหมายรายเดือน</div>';
+  var html = '<div style="font-weight:900; font-size:13px; margin-bottom:4px;">🎯 เป้าหมายเดือนนี้</div>';
+  html += '<div style="font-size:11px; color:var(--text-sub); margin-bottom:8px;">แก้ไขได้ระหว่างเดือนนี้เท่านั้น — พอขึ้นเดือนใหม่จะล็อกถาวร</div>';
   defs.forEach(function (d) {
-    var g = goals[d.key] || { enabled: false, target: 0 };
+    var dg = g[d.key] || { enabled: false, target: 0 };
     html += '<div class="field-wrap"><label class="field" style="display:flex; justify-content:space-between; align-items:center;">' + d.label +
-      '<input type="checkbox" id="goal_en_' + d.key + '"' + (g.enabled ? ' checked' : '') + ' style="width:18px; height:18px;"></label>' +
-      '<input class="form-input" type="number" id="goal_val_' + d.key + '" value="' + (g.target || 0) + '"></div>';
+      '<input type="checkbox" id="goal_en_' + d.key + '"' + (dg.enabled ? ' checked' : '') + ' style="width:18px; height:18px;"></label>' +
+      '<input class="form-input" type="number" id="goal_val_' + d.key + '" value="' + (dg.target || 0) + '"></div>';
   });
   html += '<button class="btn btn-primary" onclick="saveGoalsSettings()">บันทึกเป้าหมาย</button>';
   wrap.innerHTML = html;
@@ -214,11 +228,13 @@ function saveGoalsSettings() {
       target: Number(document.getElementById('goal_val_' + k).value) || 0
     };
   });
+  var month = APP.settingsGoalsMonth || (new Date().getMonth() + 1);
+  var year = APP.settingsGoalsYear || new Date().getFullYear();
   google.script.run.withSuccessHandler(function () {
     showToast('✅ บันทึกเป้าหมายแล้ว');
     closeSettings();
     loadHome();
-  }).withFailureHandler(showErr).setGoals(goals);
+  }).withFailureHandler(showErr).setMonthlyGoals(month, year, goals);
 }
 function closeSettings() {
   document.getElementById('settingsModal').classList.remove('show');
@@ -496,6 +512,43 @@ function renderMissingBanner(data) {
   var todayFormatted = data.todayFormatted || todayThaiLabel();
   var missing = data.missingDays || [];
   var html = '';
+
+  // NEW: Home is pinned to the previous month until the user explicitly
+  // confirms moving on (never auto-advances) — this replaces the normal
+  // banner entirely while stuck.
+  if (data.stuck) {
+    if (data.stuckComplete) {
+      html += '<div class="cyber-alert-card" style="border-color:#38bdf8; box-shadow: 0 0 14px rgba(56,189,248,0.25);">';
+      html += '  <div class="cac-header" style="border-bottom:none; margin-bottom:0; padding-bottom:0;">';
+      html += '    <div class="cac-today"><span>✅ กรอกครบแล้ว — ' + (data.homeMonthLabel || '') + '</span></div>';
+      html += '  </div>';
+      html += '  <div class="cac-body">';
+      html += '    <div><div class="cac-desc">ข้อมูลเดือนก่อนครบแล้ว พร้อมเลื่อนมาดูเดือนปัจจุบัน</div></div>';
+      html += '    <button class="cac-action-btn" onclick="advanceHomeMonth()">เลื่อนมาเดือนนี้ →</button>';
+      html += '  </div>';
+      html += '</div>';
+      return html;
+    }
+    html += '<div class="cyber-alert-card">';
+    html += '  <div class="cac-header">';
+    html += '    <div class="cac-today"><span>📅 ค้างอยู่ที่ ' + (data.homeMonthLabel || '') + '</span></div>';
+    html += '    <span class="cac-badge">ค้าง ' + missing.length + ' วัน</span>';
+    html += '  </div>';
+    html += '  <div class="cac-body">';
+    html += '    <div>';
+    html += '      <div class="cac-desc">กรอกข้อมูลเดือนก่อนให้ครบก่อน ถึงจะเลื่อนมาเดือนนี้ได้:</div>';
+    html += '      <div class="cac-pills">';
+    missing.forEach(function (m) {
+      html += '<span class="cac-pill-item" onclick="goToFinanceDate(\'' + m.dateStr + '\')">' + m.label + ' ✎</span>';
+    });
+    html += '      </div>';
+    html += '    </div>';
+    html += '    <button class="cac-action-btn" onclick="goToFinanceDate(\'' + (missing[0] ? missing[0].dateStr : '') + '\')">กรอกข้อมูล ✎</button>';
+    html += '  </div>';
+    html += '</div>';
+    return html;
+  }
+
   if (!missing.length) {
     html += '<div class="cyber-alert-card" style="border-color:#10b981; box-shadow: 0 0 14px rgba(16, 185, 129, 0.2);">';
     html += '  <div class="cac-header" style="border-bottom:none; margin-bottom:0; padding-bottom:0;">';
@@ -525,14 +578,66 @@ function renderMissingBanner(data) {
   return html;
 }
 
+// NEW: when the current (non-stuck) month hasn't had goals chosen yet,
+// prompt for it instead of silently falling back — opens the same
+// Settings modal, now scoped to this month's goal record.
+function renderGoalPromptBanner(data) {
+  if (data.stuck) return '';
+  var g = data.goals || {};
+  if (g.hasExplicitRecord) return '';
+  return '<div class="cyber-alert-card" style="border-color:#f59e0b; box-shadow:0 0 14px rgba(245,158,11,0.2); margin-bottom:12px;">' +
+    '<div class="cac-header" style="border-bottom:none; margin-bottom:0; padding-bottom:0;">' +
+    '<div class="cac-today"><span>🎯 ยังไม่ได้เลือกเป้าหมายเดือนนี้</span></div>' +
+    '</div>' +
+    '<div class="cac-body"><div><div class="cac-desc">เลือกเป้าที่จะโฟกัสเดือนนี้ก่อนเริ่ม (แก้ไขได้ระหว่างเดือน แต่ล็อกถาวรหลังจบเดือน)</div></div>' +
+    '<button class="cac-action-btn" onclick="openSettings()">ตั้งเป้าหมาย ⚙</button>' +
+    '</div></div>';
+}
+
+function advanceHomeMonth() {
+  showToast('กำลังเลื่อนเดือน...');
+  google.script.run.withSuccessHandler(function (data) {
+    renderHome(data);
+    showToast('✅ เลื่อนมาเดือนนี้แล้ว');
+  }).withFailureHandler(showErr).advanceHomeMonth();
+}
+
+// NEW: day-by-day KPI tally for the month shown — ถึงเป้า/ผ่าน/ไม่ผ่าน/หยุด
+// counts plus % of days actually worked. Reuses the same statusCategory()
+// classification the KPI calendar already uses, so the numbers always
+// match what the calendar colors show.
+function renderDayStatusSummary(days) {
+  if (!days || !days.length) return '';
+  var counts = { working: 0, gold: 0, pass: 0, guarantee: 0, partial: 0, fail: 0, off: 0 };
+  days.forEach(function (d) {
+    if (!d.hasData) return;
+    counts.working++;
+    var cat = statusCategory(d.kpiStatus);
+    if (counts[cat] !== undefined) counts[cat]++;
+  });
+  var totalDays = days.length;
+  var workPct = totalDays ? (counts.working / totalDays * 100) : 0;
+  var html = '<div class="card"><div class="card-title">สรุปวันทำงาน</div>';
+  html += '<div class="row"><span class="lbl">📅 วันทำงาน</span><span class="val">' + counts.working + ' / ' + totalDays + ' วัน <span style="color:var(--text-sub); font-size:11px;">(' + workPct.toFixed(1) + '%)</span></span></div>';
+  html += '<div class="row"><span class="lbl">🥇 ถึงเป้า</span><span class="val">' + counts.gold + ' วัน</span></div>';
+  html += '<div class="row"><span class="lbl">✅ ผ่าน</span><span class="val">' + (counts.pass + counts.guarantee) + ' วัน</span></div>';
+  html += '<div class="row"><span class="lbl">⚠️ ครึ่งวัน</span><span class="val">' + counts.partial + ' วัน</span></div>';
+  html += '<div class="row"><span class="lbl">❌ ไม่ผ่าน</span><span class="val">' + counts.fail + ' วัน</span></div>';
+  html += '<div class="row"><span class="lbl">☕ หยุด</span><span class="val">' + counts.off + ' วัน</span></div>';
+  html += '</div>';
+  return html;
+}
+
 function renderHome(data) {
   APP.homeData = data;
   var html = '';
   html += renderMissingBanner(data);
+  html += renderGoalPromptBanner(data);
   html += renderGoalsSection(data);
   html += renderMonthlyOverview(data);
   html += renderTrendSection(data);
   html += renderSimpleCalendar(data);
+  html += renderDayStatusSummary(data.monthDays);
   html += renderPerformanceSection(data);
   html += renderEfficiencySection(data);
   html += renderWeekCompareSection(data);
@@ -543,9 +648,16 @@ function renderHome(data) {
   document.getElementById('homeContent').innerHTML = html;
 }
 
+// Renders the 3 possible goal bars. Shared by Home (current month, usually
+// editable-feel) and History (any past month, always locked once that
+// month has ended — reads data.goals.locked from the backend, which is
+// simply "is this the real current month or not", so History viewing last
+// month always renders the celebratory/locked version, frozen exactly as
+// it was chosen.
 function renderGoalsSection(data) {
   var g = (data && data.goals) || {};
   var mt = (data && data.monthTotals) || {};
+  var locked = !!g.locked;
   var wc = (data && data.weekCompare) || {};
   var wThis = wc.thisWeek || null, wLast = wc.lastWeek || null;
 
@@ -557,8 +669,16 @@ function renderGoalsSection(data) {
 
   var active = defs.filter(function (d) { return g[d.key] && g[d.key].enabled; });
   if (!active.length) {
+    // Locked month with nothing chosen (or legacy month before this
+    // feature) — nothing meaningful to show, stay silent rather than nag.
+    if (locked) return '';
     return '<div class="card"><div class="card-title">เป้าหมายเดือนนี้</div><div class="empty-hint">ยังไม่ได้ตั้งเป้าหมาย — กด ⚙ ด้านบนเพื่อตั้งค่า</div></div>';
   }
+
+  var allAchieved = active.every(function (d) {
+    var target = Number(g[d.key].target) || 1;
+    return (Number(d.have) || 0) >= target;
+  });
 
   var today = new Date();
   var daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
@@ -570,38 +690,51 @@ function renderGoalsSection(data) {
     'M0 12 Q 30 18, 65 6 T 110 10'
   ];
 
-  var html = '<div class="goal-hud-wrap" style="margin-bottom: 16px;">';
+  var html = '';
+  if (locked && allAchieved) {
+    html += '<div class="card" style="text-align:center; border:1px solid rgba(250,204,21,0.4); background:linear-gradient(135deg, rgba(250,204,21,0.12), var(--card)); margin-bottom:12px;">' +
+      '<div style="font-size:30px;">🏆</div>' +
+      '<div style="font-weight:900; font-size:15px; color:#facc15; margin-top:4px;">ทำสำเร็จครบทุกเป้าหมายที่ตั้งไว้!</div>' +
+      '</div>';
+  }
+
+  html += '<div class="goal-hud-wrap" style="margin-bottom: 16px;">';
   active.forEach(function (d, i) {
     var target = Number(g[d.key].target) || 1;
     var have = Number(d.have) || 0;
     var pct = Math.min(100, Math.round((have / target) * 100));
+    var achieved = have >= target;
     var remaining = Math.max(0, target - have);
     var perDay = remaining / daysLeft;
     var waveD = wavePaths[i % wavePaths.length];
 
     var deltaText = '';
-    if (wThis && wLast && wThis[d.curKey] !== undefined && wLast[d.curKey] !== undefined) {
-      var curVal = Number(wThis[d.curKey]) || 0;
-      var prevVal = Number(wLast[d.curKey]) || 0;
-      if (prevVal > 0) {
-        var diff = curVal - prevVal;
-        var diffPct = (diff / Math.abs(prevVal)) * 100;
-        var up = diff >= 0;
-        deltaText = (up ? '▲ ' : '▼ ') + (diffPct > 999 ? '> 999%' : Math.abs(diffPct).toFixed(1) + '%') + ' สัปดาห์นี้';
+    if (!locked) {
+      if (wThis && wLast && wThis[d.curKey] !== undefined && wLast[d.curKey] !== undefined) {
+        var curVal = Number(wThis[d.curKey]) || 0;
+        var prevVal = Number(wLast[d.curKey]) || 0;
+        if (prevVal > 0) {
+          var diff = curVal - prevVal;
+          var diffPct = (diff / Math.abs(prevVal)) * 100;
+          var up = diff >= 0;
+          deltaText = (up ? '▲ ' : '▼ ') + (diffPct > 999 ? '> 999%' : Math.abs(diffPct).toFixed(1) + '%') + ' สัปดาห์นี้';
+        }
       }
-    }
-    if (!deltaText) {
-      deltaText = remaining > 0 ? 'ขาดอีก ' + fmtNum(remaining) + d.unit : 'ถึงเป้าหมายแล้ว 🎉';
+      if (!deltaText) deltaText = remaining > 0 ? 'ขาดอีก ' + fmtNum(remaining) + d.unit : 'ถึงเป้าหมายแล้ว 🎉';
+    } else {
+      deltaText = achieved ? '🎉 ทำสำเร็จ' : 'ขาดอีก ' + fmtNum(remaining) + d.unit;
     }
 
     html += '<div class="neon-hud-card ' + d.theme + '">';
     html += '  <div class="nh-top">';
-    html += '    <span class="nh-label">' + d.label + '</span>';
+    html += '    <span class="nh-label">' + d.label + (locked ? ' <span style="font-size:10px; opacity:.7;">🔒</span>' : '') + '</span>';
     html += '    <span class="nh-pct-badge" style="background: rgba(255,255,255,0.06); color:' + d.color + '; border: 1px solid ' + d.color + ';">' + pct + '%</span>';
     html += '  </div>';
     html += '  <div class="nh-val-row">';
     html += '    <span>' + fmtNum(have) + d.unit + ' <small>/ ' + fmtNum(target) + d.unit + '</small></span>';
-    html += '    <span style="font-size:11px; color:' + d.color + ';">' + (remaining > 0 ? 'เฉลี่ย ' + perDay.toFixed(1) + d.unit + '/วัน' : '🎉 สำเร็จ') + '</span>';
+    if (!locked) {
+      html += '    <span style="font-size:11px; color:' + d.color + ';">' + (remaining > 0 ? 'เฉลี่ย ' + perDay.toFixed(1) + d.unit + '/วัน' : '🎉 สำเร็จ') + '</span>';
+    }
     html += '  </div>';
     html += '  <div class="nh-track">';
     html += '    <div class="nh-fill ' + d.fillCls + '" style="width:' + pct + '%;"></div>';
@@ -1675,6 +1808,11 @@ function renderHistoryMonthly(data) {
     return;
   }
 
+  // NEW: goal bars for this exact month — locked/celebratory since any
+  // month shown here (other than the real current one) has already ended.
+  // Reuses the same renderGoalsSection Home uses, fed this month's totals.
+  html += renderGoalsSection({ goals: data.goals, monthTotals: t, weekCompare: null });
+
   html += buildNeonProfitCard(t.revenue, t.totalExp, t.netProfit, data.prevMonthProfit, t.workingDays, t.jobs, t.targetDays);
 
   // NEW: งานแยกโหมด (mode breakdown) card — added, does NOT replace anything below.
@@ -1682,6 +1820,7 @@ function renderHistoryMonthly(data) {
 
   html += renderFullDailyTable(data.days);
   html += renderKpiCalendar(data.days, data.year, data.month);
+  html += renderDayStatusSummary(data.days);
 
   html += '<div class="card"><div class="card-title">เทียบเดือนก่อน (MoM)</div>';
   html += momStatRow('รายได้', t.revenue, data.prevMonthRevenue, '฿');
