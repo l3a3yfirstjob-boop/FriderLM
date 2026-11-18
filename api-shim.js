@@ -18,7 +18,7 @@ var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwgKpoNgy-JHuqw_C
 var API_READ_FNS = [
   'getHomeSummary', 'getDailyEntry', 'checkDateHasData', 'getAnalysisPageData',
   'getMonthlyStats', 'getLifetimeSummary', 'getDropdowns', 'getPinStatus',
-  'getGoals', 'getRawText', 'getTrend', 'getModeRadarStats', 'getDeepAnalytics'
+  'getGoals', 'getMonthlyGoals', 'getRawText', 'getTrend', 'getModeRadarStats', 'getDeepAnalytics'
 ];
 
 // Security-sensitive reads that must NEVER be served from the client cache —
@@ -31,7 +31,8 @@ var API_NO_CACHE_FNS = ['getPinStatus'];
 // Functions that write data — sent as POST (text/plain body, to dodge
 // the CORS preflight that Apps Script Web Apps can't answer).
 var API_WRITE_FNS = [
-  'saveDailyEntry', 'saveRawText', 'setGoals', 'setPin', 'clearPin', 'verifyPin'
+  'saveDailyEntry', 'saveRawText', 'setGoals', 'setMonthlyGoals', 'advanceHomeMonth',
+  'setPin', 'clearPin', 'verifyPin'
 ];
 
 var ALL_API_FNS = API_READ_FNS.concat(API_WRITE_FNS);
